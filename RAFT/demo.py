@@ -10,13 +10,13 @@ import torch
 from PIL import Image
 import torch.nn.functional as F
 
-from raft import RAFT
-from utils import flow_viz
-from utils.utils import InputPadder
+from core.raft import RAFT
+from core.utils import flow_viz
+from core.utils.utils import InputPadder
 
 
 
-DEVICE = 'cuda'
+DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 def load_image(imfile):
     img = np.array(Image.open(imfile)).astype(np.uint8)
@@ -38,7 +38,7 @@ def warp(x, flo):
     grid = torch.cat((xx, yy), 1).float()
 
     if x.is_cuda:
-        grid = grid.cuda()
+        grid = grid.to(x.device)
     vgrid = grid + flo
     # scale grid to [-1,1]
     vgrid[:, 0, :, :] = 2.0 * vgrid[:, 0, :, :].clone() / max(W - 1, 1) - 1.0
@@ -46,7 +46,7 @@ def warp(x, flo):
 
     vgrid = vgrid.permute(0, 2, 3, 1)
     output = F.grid_sample(x, vgrid)
-    mask = torch.ones(x.size()).to(DEVICE)
+    mask = torch.ones(x.size()).to(x.device)
     mask = F.grid_sample(mask, vgrid)
 
     mask[mask < 0.999] = 0
@@ -77,7 +77,7 @@ def viz(img, img2, flo):
 
 def demo(args):
     model = torch.nn.DataParallel(RAFT(args))
-    model.load_state_dict(torch.load(args.model))
+    model.load_state_dict(torch.load(args.model, map_location=DEVICE))
 
     model = model.module
     model.to(DEVICE)

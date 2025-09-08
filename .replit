@@ -22,13 +22,13 @@ args = "Web Interface"
 name = "Web Interface"
 author = "agent"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "python app.py"
-waitForPort = 5000
-
 [workflows.workflow.metadata]
 outputType = "webview"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python ui/app.py"
+waitForPort = 5000
 
 [[ports]]
 localPort = 5000

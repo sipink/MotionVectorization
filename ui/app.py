@@ -37,5 +37,5 @@ def submit():
     return jsonify({"status": "queued (dry-run)", "job_id": job_id, "would_send": payload})
 
 if __name__ == "__main__":
-    # Replit favors port 8000
-    app.run(host="0.0.0.0", port=8000, debug=True)
+    # Replit webview requires port 5000
+    app.run(host="0.0.0.0", port=5000, debug=True)

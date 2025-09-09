@@ -128,31 +128,78 @@ function testConnection() {
     const modal = new bootstrap.Modal(document.getElementById('connectionTest'));
     modal.show();
     
-    // جمع البيانات من النموذج
-    const formData = new FormData();
-    formData.append('host', document.getElementById('host').value);
-    formData.append('port', document.getElementById('port').value);
-    formData.append('username', document.getElementById('username').value);
-    formData.append('password', document.getElementById('password').value);
-    formData.append('ssh_key_path', document.getElementById('ssh_key_path').value);
-    formData.append('remote_path', document.getElementById('remote_path').value);
+    // إعادة تعيين النتائج
+    document.getElementById('testResult').style.display = 'none';
+    document.querySelector('.spinner-border').parentElement.style.display = 'block';
     
-    // محاكاة اختبار الاتصال (سيتم تنفيذ هذا عبر AJAX لاحقاً)
-    setTimeout(() => {
+    // جمع البيانات من النموذج
+    const testData = {
+        host: document.getElementById('host').value,
+        port: document.getElementById('port').value,
+        username: document.getElementById('username').value,
+        password: document.getElementById('password').value,
+        ssh_key_path: document.getElementById('ssh_key_path').value,
+        remote_path: document.getElementById('remote_path').value
+    };
+    
+    // إرسال طلب اختبار الاتصال
+    fetch('/test_connection', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(testData)
+    })
+    .then(response => response.json())
+    .then(data => {
         const testResult = document.getElementById('testResult');
         const spinner = document.querySelector('.spinner-border').parentElement;
         
         spinner.style.display = 'none';
         testResult.style.display = 'block';
         
-        // محاكاة نتيجة إيجابية
+        if (data.success) {
+            testResult.innerHTML = `
+                <div class="alert alert-success" role="alert">
+                    <i class="fas fa-check-circle me-2"></i>
+                    <strong>${data.message}</strong>
+                    <hr>
+                    <div class="row">
+                        <div class="col-6">
+                            <small><strong>GPU:</strong> ${data.details.gpu}</small>
+                        </div>
+                        <div class="col-6">
+                            <small><strong>مجلد العمل:</strong> ${data.details.directory}</small>
+                        </div>
+                        <div class="col-12 mt-1">
+                            <small><strong>Python:</strong> ${data.details.python}</small>
+                        </div>
+                    </div>
+                </div>
+            `;
+        } else {
+            testResult.innerHTML = `
+                <div class="alert alert-danger" role="alert">
+                    <i class="fas fa-exclamation-circle me-2"></i>
+                    <strong>فشل الاتصال:</strong> ${data.message}
+                </div>
+            `;
+        }
+    })
+    .catch(error => {
+        const testResult = document.getElementById('testResult');
+        const spinner = document.querySelector('.spinner-border').parentElement;
+        
+        spinner.style.display = 'none';
+        testResult.style.display = 'block';
+        
         testResult.innerHTML = `
-            <div class="alert alert-success" role="alert">
-                <i class="fas fa-check-circle me-2"></i>
-                تم الاتصال بنجاح! RunPod جاهز للاستخدام.
+            <div class="alert alert-danger" role="alert">
+                <i class="fas fa-exclamation-circle me-2"></i>
+                <strong>خطأ:</strong> ${error.message || 'خطأ غير معروف'}
             </div>
         `;
-    }, 3000);
+    });
 }
 </script>
 {% endblock %}

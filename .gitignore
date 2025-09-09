@@ -1,0 +1,74 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.pythonlibs/
+venv/
+ENV/
+env/
+.venv/
+
+# Motion Vectorization specific
+uploads/
+downloads/
+logs/
+runpod_config.json
+code_archive.tar.gz
+
+# Temporary files
+*.tmp
+*.temp
+temp/
+tmp/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Runtime files
+*.pid
+*.lock
+
+# RAFT models (will be downloaded)
+RAFT/models/
+checkpoints/
+
+# Motion vectorization outputs
+motion_vectorization/outputs/
+motion_vectorization/logs/
+
+# Keep replit config
+!.replit
+!replit.nix

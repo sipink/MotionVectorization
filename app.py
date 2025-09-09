@@ -362,6 +362,91 @@ def download_result(job_id, filename):
     
     return jsonify({'error': 'الملف غير موجود'}), 404
 
+@app.route('/test_connection', methods=['POST'])
+def test_connection_endpoint():
+    """اختبار الاتصال بـ RunPod عبر AJAX"""
+    data = request.json
+    
+    # تحديث الإعدادات مؤقتاً لاختبار الاتصال
+    temp_config = runpod_config.copy()
+    if data:
+        temp_config.update({
+            'host': data.get('host', ''),
+            'port': int(data.get('port', 22)),
+            'username': data.get('username', 'root'),
+            'password': data.get('password', ''),
+            'ssh_key_path': data.get('ssh_key_path', ''),
+            'remote_path': data.get('remote_path', '/workspace/motion_vectorization')
+        })
+    
+    try:
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        
+        if temp_config['ssh_key_path'] and os.path.exists(temp_config['ssh_key_path']):
+            ssh.connect(
+                temp_config['host'],
+                port=temp_config['port'],
+                username=temp_config['username'],
+                key_filename=temp_config['ssh_key_path'],
+                timeout=15
+            )
+        else:
+            ssh.connect(
+                temp_config['host'],
+                port=temp_config['port'],
+                username=temp_config['username'],
+                password=temp_config['password'],
+                timeout=15
+            )
+        
+        # تنفيذ أوامر اختبار
+        commands = [
+            'echo "connection_test"',
+            'nvidia-smi --query-gpu=name --format=csv,noheader,nounits | head -1',
+            f'ls {temp_config["remote_path"]} 2>/dev/null || echo "directory_not_found"',
+            'python3 --version 2>/dev/null || python --version 2>/dev/null || echo "python_not_found"'
+        ]
+        
+        results = {}
+        for i, cmd in enumerate(commands):
+            stdin, stdout, stderr = ssh.exec_command(cmd)
+            output = stdout.read().decode().strip()
+            error = stderr.read().decode().strip()
+            
+            if i == 0:  # connection test
+                results['connection'] = output == "connection_test"
+            elif i == 1:  # GPU info
+                results['gpu'] = output if output and not error else "لم يتم العثور على GPU"
+            elif i == 2:  # directory check
+                results['directory'] = "موجود" if output != "directory_not_found" else "غير موجود"
+            elif i == 3:  # Python version
+                results['python'] = output if "python_not_found" not in output else "غير مثبت"
+        
+        ssh.close()
+        
+        return jsonify({
+            'success': True,
+            'message': 'تم الاتصال بنجاح!',
+            'details': results
+        })
+        
+    except paramiko.AuthenticationException:
+        return jsonify({
+            'success': False,
+            'message': 'فشل في المصادقة - تحقق من اسم المستخدم وكلمة المرور'
+        }), 401
+    except paramiko.SSHException as e:
+        return jsonify({
+            'success': False,
+            'message': f'خطأ SSH: {str(e)}'
+        }), 500
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'خطأ في الاتصال: {str(e)}'
+        }), 500
+
 @app.route('/logs')
 def view_logs():
     """عرض سجل التطبيق"""

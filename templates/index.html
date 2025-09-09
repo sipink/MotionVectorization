@@ -1,0 +1,401 @@
+{% extends "base.html" %}
+
+{% block title %}لوحة التحكم - Motion Vectorization{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8">
+        <div class="card card-custom mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="fas fa-upload me-2"></i>رفع فيديو جديد</h5>
+            </div>
+            <div class="card-body">
+                <div class="upload-area" id="uploadArea">
+                    <i class="fas fa-cloud-upload-alt fa-3x text-muted mb-3"></i>
+                    <h5>اسحب الفيديو هنا أو انقر للاختيار</h5>
+                    <p class="text-muted">الأنواع المدعومة: MP4, AVI, MOV, MKV, WMV</p>
+                    <input type="file" id="videoFile" accept=".mp4,.avi,.mov,.mkv,.wmv" style="display: none;">
+                    <button class="btn btn-primary btn-custom" onclick="document.getElementById('videoFile').click()">
+                        <i class="fas fa-folder-open me-2"></i>اختيار ملف
+                    </button>
+                </div>
+                <div id="uploadProgress" style="display: none;">
+                    <div class="progress progress-custom mt-3">
+                        <div class="progress-bar" role="progressbar" style="width: 0%"></div>
+                    </div>
+                    <p class="text-center mt-2" id="uploadStatus">جاري الرفع...</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="card card-custom">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0"><i class="fas fa-tasks me-2"></i>المهام النشطة</h5>
+            </div>
+            <div class="card-body">
+                <div id="activeJobs">
+                    {% if active_jobs %}
+                        {% for job_id, job in active_jobs.items() %}
+                            <div class="job-item mb-3 p-3 border rounded" data-job-id="{{ job_id }}">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <h6 class="mb-0">{{ job.video_file }}</h6>
+                                    <span class="badge bg-{{ 'success' if job.status == 'completed' else 'warning' if job.status == 'processing' else 'danger' if job.status == 'error' else 'primary' }}">
+                                        {{ job.status }}
+                                    </span>
+                                </div>
+                                <div class="progress progress-custom mb-2">
+                                    <div class="progress-bar" role="progressbar" style="width: {{ job.progress }}%">{{ job.progress }}%</div>
+                                </div>
+                                <small class="text-muted">بدأت في: {{ job.start_time }}</small>
+                                {% if job.status == 'completed' %}
+                                    <div class="mt-2">
+                                        <a href="{{ url_for('download_result', job_id=job_id, filename='motion_file.svg') }}" class="btn btn-sm btn-success me-2">
+                                            <i class="fas fa-download me-1"></i>تحميل SVG
+                                        </a>
+                                        <a href="{{ url_for('download_result', job_id=job_id, filename='motion_file.json') }}" class="btn btn-sm btn-info">
+                                            <i class="fas fa-download me-1"></i>تحميل JSON
+                                        </a>
+                                    </div>
+                                {% endif %}
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="text-muted text-center">لا توجد مهام نشطة</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card card-custom mb-4">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0"><i class="fas fa-server me-2"></i>حالة RunPod</h5>
+            </div>
+            <div class="card-body text-center">
+                {% if runpod_connected %}
+                    <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
+                    <h5 class="text-success">متصل</h5>
+                    <p class="text-muted">جاهز لمعالجة الفيديوهات</p>
+                    <button class="btn btn-outline-primary btn-custom" onclick="testConnection()">
+                        <i class="fas fa-sync me-2"></i>اختبار الاتصال
+                    </button>
+                {% else %}
+                    <i class="fas fa-times-circle fa-3x text-danger mb-3"></i>
+                    <h5 class="text-danger">غير متصل</h5>
+                    <p class="text-muted">يرجى إعداد الاتصال بـ RunPod</p>
+                    <a href="{{ url_for('config') }}" class="btn btn-primary btn-custom">
+                        <i class="fas fa-cog me-2"></i>إعداد الاتصال
+                    </a>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card card-custom">
+            <div class="card-header bg-warning text-white">
+                <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i>معلومات النظام</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-2">
+                    <strong>المهام النشطة:</strong> 
+                    <span class="badge bg-primary">{{ active_jobs|length }}</span>
+                </div>
+                <div class="mb-2">
+                    <strong>حالة GPU:</strong> 
+                    <span class="text-warning">RunPod</span>
+                </div>
+                <div class="mb-2">
+                    <strong>المساحة المتاحة:</strong> 
+                    <span class="text-info">غير محدود</span>
+                </div>
+                <hr>
+                <h6>الميزات:</h6>
+                <ul class="list-unstyled">
+                    <li><i class="fas fa-check text-success me-2"></i>معالجة RAFT</li>
+                    <li><i class="fas fa-check text-success me-2"></i>تحويل SVG</li>
+                    <li><i class="fas fa-check text-success me-2"></i>تتبع الحركة</li>
+                    <li><i class="fas fa-check text-success me-2"></i>تحسين الأشكال</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal لعرض تفاصيل المهمة -->
+<div class="modal fade" id="jobModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">تفاصيل المهمة</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="jobDetails"></div>
+                <div class="log-container mt-3" id="jobLogs" style="display: none;">
+                    <h6>سجل العمليات:</h6>
+                    <div id="logContent"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// متغيرات عامة
+let currentJobId = null;
+let jobUpdateInterval = null;
+
+// إعداد منطقة الرفع
+const uploadArea = document.getElementById('uploadArea');
+const videoFile = document.getElementById('videoFile');
+
+// أحداث السحب والإفلات
+uploadArea.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    uploadArea.classList.add('dragover');
+});
+
+uploadArea.addEventListener('dragleave', () => {
+    uploadArea.classList.remove('dragover');
+});
+
+uploadArea.addEventListener('drop', (e) => {
+    e.preventDefault();
+    uploadArea.classList.remove('dragover');
+    
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+        videoFile.files = files;
+        uploadVideo();
+    }
+});
+
+uploadArea.addEventListener('click', () => {
+    videoFile.click();
+});
+
+videoFile.addEventListener('change', uploadVideo);
+
+// رفع الفيديو
+function uploadVideo() {
+    const file = videoFile.files[0];
+    if (!file) return;
+    
+    const formData = new FormData();
+    formData.append('video', file);
+    
+    const progressDiv = document.getElementById('uploadProgress');
+    const progressBar = progressDiv.querySelector('.progress-bar');
+    const statusText = document.getElementById('uploadStatus');
+    
+    progressDiv.style.display = 'block';
+    uploadArea.style.display = 'none';
+    
+    fetch('/upload', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            statusText.textContent = 'تم الرفع بنجاح! جاري بدء المعالجة...';
+            progressBar.style.width = '100%';
+            
+            // بدء المعالجة
+            startProcessing(data.filename);
+        } else {
+            alert('خطأ في الرفع: ' + data.error);
+            resetUpload();
+        }
+    })
+    .catch(error => {
+        alert('خطأ: ' + error);
+        resetUpload();
+    });
+}
+
+// بدء المعالجة
+function startProcessing(filename) {
+    fetch('/start_processing', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ video_file: filename })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.job_id) {
+            currentJobId = data.job_id;
+            monitorJob(data.job_id);
+            resetUpload();
+            
+            // إضافة المهمة للقائمة
+            addJobToList(data.job_id, filename);
+        } else {
+            alert('خطأ في بدء المعالجة: ' + data.error);
+            resetUpload();
+        }
+    })
+    .catch(error => {
+        alert('خطأ: ' + error);
+        resetUpload();
+    });
+}
+
+// مراقبة المهمة
+function monitorJob(jobId) {
+    if (jobUpdateInterval) {
+        clearInterval(jobUpdateInterval);
+    }
+    
+    jobUpdateInterval = setInterval(() => {
+        fetch(`/job_status/${jobId}`)
+        .then(response => response.json())
+        .then(data => {
+            updateJobDisplay(jobId, data);
+            
+            if (data.status === 'completed' || data.status === 'error') {
+                clearInterval(jobUpdateInterval);
+            }
+        })
+        .catch(error => {
+            console.error('خطأ في مراقبة المهمة:', error);
+        });
+    }, 2000);
+}
+
+// تحديث عرض المهمة
+function updateJobDisplay(jobId, jobData) {
+    const jobElement = document.querySelector(`[data-job-id="${jobId}"]`);
+    if (!jobElement) return;
+    
+    const progressBar = jobElement.querySelector('.progress-bar');
+    const statusBadge = jobElement.querySelector('.badge');
+    
+    progressBar.style.width = jobData.progress + '%';
+    progressBar.textContent = jobData.progress + '%';
+    
+    statusBadge.textContent = jobData.status;
+    statusBadge.className = `badge bg-${getStatusColor(jobData.status)}`;
+    
+    // إضافة أزرار التحميل إذا اكتملت
+    if (jobData.status === 'completed') {
+        let downloadSection = jobElement.querySelector('.download-section');
+        if (!downloadSection) {
+            downloadSection = document.createElement('div');
+            downloadSection.className = 'download-section mt-2';
+            downloadSection.innerHTML = `
+                <a href="/download_result/${jobId}/motion_file.svg" class="btn btn-sm btn-success me-2">
+                    <i class="fas fa-download me-1"></i>تحميل SVG
+                </a>
+                <a href="/download_result/${jobId}/motion_file.json" class="btn btn-sm btn-info">
+                    <i class="fas fa-download me-1"></i>تحميل JSON
+                </a>
+                <button class="btn btn-sm btn-outline-primary" onclick="showJobDetails('${jobId}')">
+                    <i class="fas fa-eye me-1"></i>التفاصيل
+                </button>
+            `;
+            jobElement.appendChild(downloadSection);
+        }
+    }
+}
+
+// إضافة مهمة للقائمة
+function addJobToList(jobId, filename) {
+    const activeJobsDiv = document.getElementById('activeJobs');
+    const emptyMessage = activeJobsDiv.querySelector('.text-muted');
+    if (emptyMessage) {
+        emptyMessage.remove();
+    }
+    
+    const jobElement = document.createElement('div');
+    jobElement.className = 'job-item mb-3 p-3 border rounded';
+    jobElement.setAttribute('data-job-id', jobId);
+    jobElement.innerHTML = `
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <h6 class="mb-0">${filename}</h6>
+            <span class="badge bg-primary">preparing</span>
+        </div>
+        <div class="progress progress-custom mb-2">
+            <div class="progress-bar" role="progressbar" style="width: 0%">0%</div>
+        </div>
+        <small class="text-muted">بدأت في: ${new Date().toLocaleString('ar')}</small>
+    `;
+    
+    activeJobsDiv.insertBefore(jobElement, activeJobsDiv.firstChild);
+}
+
+// الحصول على لون الحالة
+function getStatusColor(status) {
+    switch(status) {
+        case 'completed': return 'success';
+        case 'error': return 'danger';
+        case 'processing': return 'warning';
+        default: return 'primary';
+    }
+}
+
+// إعادة تعيين منطقة الرفع
+function resetUpload() {
+    document.getElementById('uploadProgress').style.display = 'none';
+    document.getElementById('uploadArea').style.display = 'block';
+    videoFile.value = '';
+}
+
+// اختبار الاتصال
+function testConnection() {
+    alert('جاري اختبار الاتصال...');
+    // يمكن إضافة AJAX call لاختبار الاتصال
+}
+
+// عرض تفاصيل المهمة
+function showJobDetails(jobId) {
+    fetch(`/job_status/${jobId}`)
+    .then(response => response.json())
+    .then(data => {
+        const modal = new bootstrap.Modal(document.getElementById('jobModal'));
+        const detailsDiv = document.getElementById('jobDetails');
+        const logsDiv = document.getElementById('jobLogs');
+        const logContent = document.getElementById('logContent');
+        
+        detailsDiv.innerHTML = `
+            <p><strong>ملف الفيديو:</strong> ${data.video_file}</p>
+            <p><strong>الحالة:</strong> <span class="badge bg-${getStatusColor(data.status)}">${data.status}</span></p>
+            <p><strong>التقدم:</strong> ${data.progress}%</p>
+            <p><strong>وقت البداية:</strong> ${new Date(data.start_time).toLocaleString('ar')}</p>
+            ${data.end_time ? `<p><strong>وقت الانتهاء:</strong> ${new Date(data.end_time).toLocaleString('ar')}</p>` : ''}
+        `;
+        
+        if (data.log && data.log.length > 0) {
+            logsDiv.style.display = 'block';
+            logContent.innerHTML = data.log.map(log => `<div>${log}</div>`).join('');
+        } else {
+            logsDiv.style.display = 'none';
+        }
+        
+        modal.show();
+    })
+    .catch(error => {
+        alert('خطأ في تحميل التفاصيل: ' + error);
+    });
+}
+
+// تحديث دوري للمهام النشطة
+setInterval(() => {
+    const jobElements = document.querySelectorAll('[data-job-id]');
+    jobElements.forEach(element => {
+        const jobId = element.getAttribute('data-job-id');
+        const statusBadge = element.querySelector('.badge');
+        if (statusBadge && !['completed', 'error'].includes(statusBadge.textContent)) {
+            fetch(`/job_status/${jobId}`)
+            .then(response => response.json())
+            .then(data => updateJobDisplay(jobId, data))
+            .catch(error => console.error('خطأ في التحديث:', error));
+        }
+    });
+}, 5000);
+</script>
+{% endblock %}

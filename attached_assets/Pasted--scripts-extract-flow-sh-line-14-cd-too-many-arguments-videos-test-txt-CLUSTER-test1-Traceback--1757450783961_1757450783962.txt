@@ -1,0 +1,52 @@
+./scripts/extract_flow.sh: line 14: cd: too many arguments
+videos/test.txt
+CLUSTER
+test1
+Traceback (most recent call last):
+  File "/opt/miniconda3/envs/motion_vectorization/lib/python3.8/runpy.py", line 194, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/opt/miniconda3/envs/motion_vectorization/lib/python3.8/runpy.py", line 87, in _run_code
+    exec(code, run_globals)
+  File "/workspace/MotionVectorization/motion_vectorization/extract_clusters.py", line 14, in <module>
+    from .utils import *
+  File "/workspace/MotionVectorization/motion_vectorization/utils.py", line 14, in <module>
+    from torchvision.transforms import Resize
+ModuleNotFoundError: No module named 'torchvision'
+TRACK
+Logging to motion_vectorization/logs/test1_track_19109.out
+Traceback (most recent call last):
+  File "/opt/miniconda3/envs/motion_vectorization/lib/python3.8/runpy.py", line 194, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/opt/miniconda3/envs/motion_vectorization/lib/python3.8/runpy.py", line 87, in _run_code
+    exec(code, run_globals)
+  File "/workspace/MotionVectorization/motion_vectorization/extract_shapes.py", line 19, in <module>
+    from .dataloader import DataLoader
+  File "/workspace/MotionVectorization/motion_vectorization/dataloader.py", line 7, in <module>
+    from .utils import get_numbers
+  File "/workspace/MotionVectorization/motion_vectorization/utils.py", line 14, in <module>
+    from torchvision.transforms import Resize
+ModuleNotFoundError: No module named 'torchvision'
+OPTIM
+Logging to motion_vectorization/logs/test1_optim_1142.out
+Traceback (most recent call last):
+  File "/opt/miniconda3/envs/motion_vectorization/lib/python3.8/runpy.py", line 194, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/opt/miniconda3/envs/motion_vectorization/lib/python3.8/runpy.py", line 87, in _run_code
+    exec(code, run_globals)
+  File "/workspace/MotionVectorization/motion_vectorization/optimize_shapes.py", line 21, in <module>
+    from .utils import *
+  File "/workspace/MotionVectorization/motion_vectorization/utils.py", line 14, in <module>
+    from torchvision.transforms import Resize
+ModuleNotFoundError: No module named 'torchvision'
+PROGRAM
+Traceback (most recent call last):
+  File "/opt/miniconda3/envs/motion_vectorization/lib/python3.8/runpy.py", line 194, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/opt/miniconda3/envs/motion_vectorization/lib/python3.8/runpy.py", line 87, in _run_code
+    exec(code, run_globals)
+  File "/workspace/MotionVectorization/motion_vectorization/create_motion_file.py", line 12, in <module>
+    from .utils import get_numbers
+  File "/workspace/MotionVectorization/motion_vectorization/utils.py", line 14, in <module>
+    from torchvision.transforms import Resize
+ModuleNotFoundError: No module named 'torchvision'
+(motion_vectorization) root@30fb68955ee8:/workspace/MotionVectorization# 

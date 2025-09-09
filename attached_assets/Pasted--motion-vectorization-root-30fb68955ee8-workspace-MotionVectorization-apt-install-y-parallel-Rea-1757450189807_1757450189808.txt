@@ -1,0 +1,47 @@
+(motion_vectorization) root@30fb68955ee8:/workspace/MotionVectorization# apt install -y parallel
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+The following additional packages will be installed:
+  sysstat
+Suggested packages:
+  ash csh fish ksh tcsh zsh isag
+The following NEW packages will be installed:
+  parallel sysstat
+0 upgraded, 2 newly installed, 0 to remove and 99 not upgraded.
+Need to get 2434 kB of archives.
+After this operation, 4521 kB of additional disk space will be used.
+Get:1 http://archive.ubuntu.com/ubuntu jammy-updates/main amd64 sysstat amd64 12.5.2-2ubuntu0.2 [487 kB]
+Get:2 http://archive.ubuntu.com/ubuntu jammy/universe amd64 parallel all 20210822+ds-2 [1947 kB]
+Fetched 2434 kB in 0s (5682 kB/s) 
+debconf: delaying package configuration, since apt-utils is not installed
+Selecting previously unselected package sysstat.
+(Reading database ... 26219 files and directories currently installed.)
+Preparing to unpack .../sysstat_12.5.2-2ubuntu0.2_amd64.deb ...
+Unpacking sysstat (12.5.2-2ubuntu0.2) ...
+Selecting previously unselected package parallel.
+Preparing to unpack .../parallel_20210822+ds-2_all.deb ...
+Adding 'diversion of /usr/bin/parallel to /usr/bin/parallel.moreutils by parallel'
+Adding 'diversion of /usr/share/man/man1/parallel.1.gz to /usr/share/man/man1/parallel.moreutils.1.gz by parallel'
+Unpacking parallel (20210822+ds-2) ...
+Setting up sysstat (12.5.2-2ubuntu0.2) ...
+
+Creating config file /etc/default/sysstat with new version
+update-alternatives: using /usr/bin/sar.sysstat to provide /usr/bin/sar (sar) in auto mode
+update-alternatives: warning: skip creation of /usr/share/man/man1/sar.1.gz because associated file /usr/share/man/man1/sar.sysstat.1.gz (of link group sar) doesn't exist
+Created symlink /etc/systemd/system/sysstat.service.wants/sysstat-collect.timer → /lib/systemd/system/sysstat-collect.timer.
+Created symlink /etc/systemd/system/sysstat.service.wants/sysstat-summary.timer → /lib/systemd/system/sysstat-summary.timer.
+Created symlink /etc/systemd/system/multi-user.target.wants/sysstat.service → /lib/systemd/system/sysstat.service.
+Setting up parallel (20210822+ds-2) ...
+(motion_vectorization) root@30fb68955ee8:/workspace/MotionVectorization# # إضافة RAFT للـ Python path  
+export PYTHONPATH="${PYTHONPATH}:/workspace/MotionVectorization"
+
+# أو تثبيت RAFT كحزمة
+cd RAFT && pip install -e . && cd ..
+Obtaining file:///workspace/MotionVectorization/RAFT
+ERROR: file:///workspace/MotionVectorization/RAFT does not appear to be a Python project: neither 'setup.py' nor 'pyproject.toml' found.
+(motion_vectorization) root@30fb68955ee8:/workspace/MotionVectorization/RAFT# # تفعيل البيئة والتشغيل
+conda activate motion_vectorization
+./scripts/script.sh videos/test.txt
+bash: ./scripts/script.sh: No such file or directory
+(motion_vectorization) root@30fb68955ee8:/workspace/MotionVectorization/RAFT# 

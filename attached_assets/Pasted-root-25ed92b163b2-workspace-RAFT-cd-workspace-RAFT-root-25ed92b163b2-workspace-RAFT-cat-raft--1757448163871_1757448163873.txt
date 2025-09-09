@@ -1,0 +1,87 @@
+root@25ed92b163b2:/workspace/RAFT# cd /workspace/RAFT
+root@25ed92b163b2:/workspace/RAFT# cat > raft_fixed.py << 'EOF'
+import sys
+sys.path.append('core')
+import argparse
+import os
+import cv2
+import glob
+import numpy as np
+import torch
+from PIL import Image
+from raft import RAFT
+from utils import flow_viz
+from utils.utils import InputPadder
+DEVICE = 'cuda'
+def load_image(imfile):
+    img = np.array(Image.open(imfile)).astype(np.uint8)
+    img = torch.from_numpy(img).permute(2, 0, 1).float()
+    return img[None].to(DEVICE)
+def main():
+    # إنشاء args صحيح
+    args = argparse.Namespace()
+    args.small = False
+    args.mixed_precision = False  
+    args.alternate_corr = False
+    
+    print("🚀 Loading RAFT...")
+    model = torch.nn.DataParallel(RAFT(args))
+    model.load_state_dict(torch.load('models/raft-things.pth'))
+    
+    # استخراج النموذج من DataParallel
+    model = model.module
+    model.to(DEVICE)
+    model.eval()
+    print("✅ RAFT loaded!")
+    with torch.no_grad():
+        images = sorted(glob.glob('video_frames/*.png'))
+        print(f"📹 Processing {len(images)} frames...")
+        
+        # معالجة أول 5 أزواج
+        for i, (imfile1, imfile2) in enumerate(zip(images[:-1], images[1:])):
+            if i >= 5:
+                break
+                
+            print(f"🔄 Processing {i+1}/5...")
+            
+            image1 = load_image(imfile1)
+            image2 = load_image(imfile2)
+            padder = InputPadder(image1.shape)
+            image1, image2 = padder.pad(image1, image2)
+            flow_low, flow_up = model(image1, image2, iters=20, test_mode=True)
+            
+            # حفظ النتائج بدلاً من العرض
+            flow_rgb = flow_viz.flow_to_image(flow_up[0].permute(1,2,0).cpu().numpy())
+            cv2.imwrite(f'flow_{i:04d}.png', flow_rgb[:,:,[2,1,0]])
+            print(f"💾 Saved flow_{i:04d}.png")
+EOF main()_ == '__main__':
+root@25ed92b163b2:/workspace/RAFT# python raft_fixed.py
+🚀 Loading RAFT...
+✅ RAFT loaded!
+📹 Processing 238 frames...
+🔄 Processing 1/5...
+/workspace/RAFT/core/raft.py:99: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  with autocast(enabled=self.args.mixed_precision):
+/workspace/RAFT/core/raft.py:110: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  with autocast(enabled=self.args.mixed_precision):
+/usr/local/lib/python3.11/dist-packages/torch/functional.py:554: UserWarning: torch.meshgrid: in an upcoming release, it will be required to pass the indexing argument. (Triggered internally at /pytorch/aten/src/ATen/native/TensorShape.cpp:4314.)
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+/workspace/RAFT/core/raft.py:127: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  with autocast(enabled=self.args.mixed_precision):
+💾 Saved flow_0000.png
+🔄 Processing 2/5...
+💾 Saved flow_0001.png
+🔄 Processing 3/5...
+💾 Saved flow_0002.png
+🔄 Processing 4/5...
+💾 Saved flow_0003.png
+🔄 Processing 5/5...
+💾 Saved flow_0004.png
+🎉 Done!
+root@25ed92b163b2:/workspace/RAFT# ls -la flow_*.png
+-rw-rw-rw- 1 root root 130600 Sep  9 20:02 flow_0000.png
+-rw-rw-rw- 1 root root 130600 Sep  9 20:02 flow_0001.png
+-rw-rw-rw- 1 root root 130600 Sep  9 20:02 flow_0002.png
+-rw-rw-rw- 1 root root 130600 Sep  9 20:02 flow_0003.png
+-rw-rw-rw- 1 root root 130600 Sep  9 20:02 flow_0004.png
+root@25ed92b163b2:/workspace/RAFT# 

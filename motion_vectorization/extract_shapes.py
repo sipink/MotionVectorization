@@ -261,7 +261,9 @@ def main():
     frame_height, frame_width, _ = curr_frame.shape
     frame_lab = cv2.cvtColor(cv2.bilateralFilter(curr_frame, 9, 25, 25), cv2.COLOR_BGR2LAB)
     lab_mode, _ = np.array(stats.mode(np.reshape(frame_lab, (-1, 3)), axis=0))
-    bgr_mode = cv2.cvtColor(np.uint8(np.array(lab_mode[0])[None, None, ...]), cv2.COLOR_LAB2BGR).squeeze()
+    # Fix: Ensure lab_mode has 3 channels for LAB2BGR conversion
+    lab_mode_3ch = np.uint8(np.array(lab_mode)[None, None, :])  # Shape: (1, 1, 3)
+    bgr_mode = cv2.cvtColor(lab_mode_3ch, cv2.COLOR_LAB2BGR).squeeze()
     if t <= arg.base_frame:
       time_bank['bgr'].insert(0, bgr_mode)
     else:

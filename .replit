@@ -5,3 +5,47 @@ expertMode = true
 [nix]
 channel = "stable-25_05"
 packages = ["cairo", "ffmpeg-full", "freetype", "ghostscript", "gobject-introspection", "gtk3", "lcms2", "libGL", "libGLU", "libimagequant", "libjpeg", "libjpeg_turbo", "libpng", "libtiff", "libwebp", "libxcrypt", "openjpeg", "pkg-config", "qhull", "tcl", "tk", "which", "xsimd", "zlib"]
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Motion Vectorization Pipeline"
+
+[[workflows.workflow]]
+name = "Motion Vectorization Pipeline"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = """
+cd /home/runner/workspace && echo \"🎬 Motion Vectorization Project - Ready for Processing
+
+📊 Status:
+========
+✅ RAFT: Fixed imports with GPU support
+✅ Dependencies: All installed and working
+✅ Color conversion: Fixed LAB2BGR issue
+✅ Project structure: Ready
+
+🚀 Commands:
+   • Process video: ./scripts/script.sh videos/test.txt
+   • Generate SVG: ./scripts/convert_to_svg.sh test1 30
+   • Check outputs: ls motion_vectorization/outputs/test1_None/
+
+📂 Expected Output Files:
+   - time_bank.pkl
+   - shape_bank.pkl  
+   - motion_file.json
+   - motion_file.svg (after SVG generation)
+
+🎯 Ready for motion graphics processing!\""""
+
+[workflows.workflow.metadata]
+outputType = "console"

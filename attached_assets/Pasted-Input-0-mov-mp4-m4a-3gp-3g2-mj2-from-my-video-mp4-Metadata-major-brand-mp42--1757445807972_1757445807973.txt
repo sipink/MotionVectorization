@@ -1,0 +1,67 @@
+Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'my_video.mp4':
+  Metadata:
+    major_brand     : mp42
+    minor_version   : 0
+    compatible_brands: isommp42
+    creation_time   : 2024-08-22T00:45:22.000000Z
+    encoder         : Google
+  Duration: 00:00:09.52, start: 0.000000, bitrate: 457 kb/s
+  Stream #0:0(und): Video: h264 (Main) (avc1 / 0x31637661), yuv420p(tv, bt709), 640x360 [SAR 1:1 DAR 16:9], 324 kb/s, 25 fps, 25 tbr, 12800 tbn, 50 tbc (default)
+    Metadata:
+      creation_time   : 2024-08-22T00:45:22.000000Z
+      handler_name    : ISO Media file produced by Google Inc. Created on: 08/21/2024.
+      vendor_id       : [0][0][0][0]
+  Stream #0:1(eng): Audio: aac (LC) (mp4a / 0x6134706D), 44100 Hz, stereo, fltp, 128 kb/s (default)
+    Metadata:
+      creation_time   : 2024-08-22T00:45:22.000000Z
+      handler_name    : ISO Media file produced by Google Inc. Created on: 08/21/2024.
+      vendor_id       : [0][0][0][0]
+Stream mapping:
+  Stream #0:0 -> #0:0 (h264 (native) -> png (native))
+Press [q] to stop, [?] for help
+Output #0, image2, to 'video_frames/frame_%04d.png':
+  Metadata:
+    major_brand     : mp42
+    minor_version   : 0
+    compatible_brands: isommp42
+    encoder         : Lavf58.76.100
+  Stream #0:0(und): Video: png, rgb24(pc, gbr/bt709/bt709, progressive), 640x360 [SAR 1:1 DAR 16:9], q=2-31, 200 kb/s, 25 fps, 25 tbn (default)
+    Metadata:
+      creation_time   : 2024-08-22T00:45:22.000000Z
+      handler_name    : ISO Media file produced by Google Inc. Created on: 08/21/2024.
+      vendor_id       : [0][0][0][0]
+      encoder         : Lavc58.134.100 png
+frame=  238 fps= 66 q=-0.0 Lsize=N/A time=00:00:09.52 bitrate=N/A speed=2.65x
+video:20941kB audio:0kB subtitle:0kB other streams:0kB global headers:0kB muxing overhead: unknown
+root@25ed92b163b2:/workspace/RAFT# python -c "
+> import sys, os, glob, torch, numpy as np, cv2
+> from PIL import Image
+> sys.path.append('core')
+> from raft import RAFT
+> from utils import flow_viz
+> from utils.utils import InputPadder
+>
+> model = RAFT()
+> model.load_state_dict(torch.load('models/raft-things.pth'))
+> model.cuda().eval()
+>
+> images = sorted(glob.glob('video_frames/*.png'))
+> print(f'Processing {len(images)} frames...')
+>
+> for i in range(min(len(images)-1, 10)):
+>     img1 = torch.from_numpy(np.array(Image.open(images[i]))).permute(2,0,1).float().cuda()[None]
+>     img2 = torch.from_numpy(np.array(Image.open(images[i+1]))).permute(2,0,1).float().cuda()[None]
+>
+>     with torch.no_grad():
+>         flow = model(img1, img2, iters=20, test_mode=True)[1]
+>         flo_viz = flow_viz.flow_to_image(flow[0].permute(1,2,0).cpu().numpy())
+>         cv2.imwrite(f'flow_{i:04d}.png', flo_viz[:,:,[2,1,0]])
+>         print(f'Saved flow_{i:04d}.png')
+> print('Done!')
+> "
+Traceback (most recent call last):
+  File "<string>", line 9, in <module>
+TypeError: RAFT.__init__() missing 1 required positional argument: 'args'
+root@25ed92b163b2:/workspace/RAFT# ls -la flow_*.png
+ls: cannot access 'flow_*.png': No such file or directory
+root@25ed92b163b2:/workspace/RAFT#

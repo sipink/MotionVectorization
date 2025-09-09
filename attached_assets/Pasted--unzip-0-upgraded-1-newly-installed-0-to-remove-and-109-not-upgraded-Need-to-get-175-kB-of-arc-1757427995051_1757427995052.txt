@@ -1,0 +1,45 @@
+  unzip
+0 upgraded, 1 newly installed, 0 to remove and 109 not upgraded.
+Need to get 175 kB of archives.
+After this operation, 386 kB of additional disk space will be used.
+Get:1 http://archive.ubuntu.com/ubuntu jammy-updates/main amd64 unzip amd64 6.0-26ubuntu3.2 [175 kB]
+Fetched 175 kB in 0s (579 kB/s)
+debconf: delaying package configuration, since apt-utils is not installed
+Selecting previously unselected package unzip.
+(Reading database ... 24286 files and directories currently installed.)
+Preparing to unpack .../unzip_6.0-26ubuntu3.2_amd64.deb ...
+Unpacking unzip (6.0-26ubuntu3.2) ...
+Setting up unzip (6.0-26ubuntu3.2) ...
+Processing triggers for mailcap (3.70+nmu1ubuntu1) ...
+root@dffc89ac6e44:/workspace/RAFT# unzip models.zip
+Archive:  models.zip
+  inflating: models/raft-kitti.pth
+  inflating: models/raft-sintel.pth
+  inflating: models/raft-chairs.pth
+  inflating: models/raft-things.pth
+  inflating: models/raft-small.pth
+root@dffc89ac6e44:/workspace/RAFT# ls -la models/
+total 86360
+drwxr-xr-x 2 root root      143 Sep  9 14:26 .
+drwxr-xr-x 7 root root     4096 Sep  9 14:24 ..
+-rw-r--r-- 1 root root 21108000 Jul 25  2020 raft-chairs.pth
+-rw-r--r-- 1 root root 21108000 Jul 25  2020 raft-kitti.pth
+-rw-r--r-- 1 root root 21108000 Jul 25  2020 raft-sintel.pth
+-rw-rw-r-- 1 root root  3984814 Aug 24  2020 raft-small.pth
+-rw-r--r-- 1 root root 21108000 Jul 25  2020 raft-things.pth
+root@dffc89ac6e44:/workspace/RAFT# python demo.py --model=models/raft-things.pth --path=demo-frames
+/workspace/RAFT/core/raft.py:99: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  with autocast(enabled=self.args.mixed_precision):
+/workspace/RAFT/core/raft.py:110: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  with autocast(enabled=self.args.mixed_precision):
+/usr/local/lib/python3.11/dist-packages/torch/functional.py:554: UserWarning: torch.meshgrid: in an upcoming release, it will be required to pass the indexing argument. (Triggered internally at /pytorch/aten/src/ATen/native/TensorShape.cpp:4314.)
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+/workspace/RAFT/core/raft.py:127: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  with autocast(enabled=self.args.mixed_precision):
+qt.qpa.plugin: Could not load the Qt platform plugin "xcb" in "/usr/local/lib/python3.11/dist-packages/cv2/qt/plugins" even though it was found.
+This application failed to start because no Qt platform plugin could be initialized. Reinstalling the application may fix this problem.
+
+Available platform plugins are: xcb.
+
+Aborted (core dumped)
+root@dffc89ac6e44:/workspace/RAFT#

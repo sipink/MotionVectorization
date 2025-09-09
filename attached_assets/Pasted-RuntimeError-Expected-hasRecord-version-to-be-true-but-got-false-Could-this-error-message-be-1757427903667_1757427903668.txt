@@ -1,0 +1,39 @@
+RuntimeError: Expected hasRecord("version") to be true, but got false.  (Could this error message be improved?  If so, please report an enhancement request to PyTorch.)
+root@dffc89ac6e44:/workspace/RAFT# rm models/raft-things.pth
+root@dffc89ac6e44:/workspace/RAFT# # فحص إذا كان هناك script التحميل الرسمي
+root@dffc89ac6e44:/workspace/RAFT# ls -la *.sh
+-rwxr-xr-x 1 root root  97 Sep  9 14:15 download_models.sh
+-rwxr-xr-x 1 root root 921 Sep  9 14:15 train_mixed.sh
+-rwxr-xr-x 1 root root 860 Sep  9 14:15 train_standard.sh
+root@dffc89ac6e44:/workspace/RAFT# chmod +x download_models.sh
+root@dffc89ac6e44:/workspace/RAFT# ./download_models.sh
+--2025-09-09 14:24:35--  https://dl.dropboxusercontent.com/s/4j4z58wuv8o0mfz/models.zip
+Resolving dl.dropboxusercontent.com (dl.dropboxusercontent.com)... 162.125.8.15, 2620:100:601b:15::a27d:80f
+Connecting to dl.dropboxusercontent.com (dl.dropboxusercontent.com)|162.125.8.15|:443... connected.
+HTTP request sent, awaiting response... 200 OK
+Length: 81977417 (78M) [application/zip]
+Saving to: 'models.zip'
+
+models.zip                                            100%[=========================================================================================================================>]  78.18M   110MB/s    in 0.7s
+
+2025-09-09 14:24:36 (110 MB/s) - 'models.zip' saved [81977417/81977417]
+
+./download_models.sh: line 3: unzip: command not found
+root@dffc89ac6e44:/workspace/RAFT# python demo.py --model=models/raft-things.pth --path=demo-frames
+Traceback (most recent call last):
+  File "/workspace/RAFT/demo.py", line 75, in <module>
+    demo(args)
+  File "/workspace/RAFT/demo.py", line 44, in demo
+    model.load_state_dict(torch.load(args.model))
+                          ^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/dist-packages/torch/serialization.py", line 1479, in load
+    with _open_file_like(f, "rb") as opened_file:
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/dist-packages/torch/serialization.py", line 759, in _open_file_like
+    return _open_file(name_or_buffer, mode)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/dist-packages/torch/serialization.py", line 740, in __init__
+    super().__init__(open(name, mode))
+                     ^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'models/raft-things.pth'
+root@dffc89ac6e44:/workspace/RAFT#

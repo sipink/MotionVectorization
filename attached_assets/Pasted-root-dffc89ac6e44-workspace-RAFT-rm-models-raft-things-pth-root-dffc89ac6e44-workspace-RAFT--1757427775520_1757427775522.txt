@@ -1,0 +1,44 @@
+root@dffc89ac6e44:/workspace/RAFT# rm models/raft-things.pth
+root@dffc89ac6e44:/workspace/RAFT# # جرب هذا الرابط
+root@dffc89ac6e44:/workspace/RAFT# wget -O models/raft-things.pth "https://www.dropbox.com/s/4j4z58wuv8o0mfz/raft-things.pth?dl=1"
+--2025-09-09 14:22:15--  https://www.dropbox.com/s/4j4z58wuv8o0mfz/raft-things.pth?dl=1
+Resolving www.dropbox.com (www.dropbox.com)... 162.125.8.18, 2620:100:601f:18::a27d:912
+Connecting to www.dropbox.com (www.dropbox.com)|162.125.8.18|:443... connected.
+HTTP request sent, awaiting response... 302 Found
+Location: https://www.dropbox.com/scl/fi/1gtoiul6tr71ag8xjet5v/raft-things.pth?rlkey=lu59i7g742lo6o2yt15f8t96r&dl=1 [following]
+--2025-09-09 14:22:15--  https://www.dropbox.com/scl/fi/1gtoiul6tr71ag8xjet5v/raft-things.pth?rlkey=lu59i7g742lo6o2yt15f8t96r&dl=1
+Reusing existing connection to www.dropbox.com:443.
+HTTP request sent, awaiting response... 302 Found
+Location: https://uc9d5eb2c72b2ea8dbe7872dd6c9.dl.dropboxusercontent.com/cd/0/inline/CxC_ov34y_iE4TOoeo-JxlQ1M4djT6w88fjMvo39tCy4yXPGLv6H4vcQHCCwk4qzt-tOMuvdr0dzUxMXgbeSU2-X_pQd7KRY-61XlHai5n0Tyq3wvIXWWvEvv-Iz-53FazCHHt19kBRzM_Pfd6ojfYfU/file?dl=1# [following]
+--2025-09-09 14:22:16--  https://uc9d5eb2c72b2ea8dbe7872dd6c9.dl.dropboxusercontent.com/cd/0/inline/CxC_ov34y_iE4TOoeo-JxlQ1M4djT6w88fjMvo39tCy4yXPGLv6H4vcQHCCwk4qzt-tOMuvdr0dzUxMXgbeSU2-X_pQd7KRY-61XlHai5n0Tyq3wvIXWWvEvv-Iz-53FazCHHt19kBRzM_Pfd6ojfYfU/file?dl=1
+Resolving uc9d5eb2c72b2ea8dbe7872dd6c9.dl.dropboxusercontent.com (uc9d5eb2c72b2ea8dbe7872dd6c9.dl.dropboxusercontent.com)... 162.125.8.15, 2620:100:601f:15::a27d:90f
+Connecting to uc9d5eb2c72b2ea8dbe7872dd6c9.dl.dropboxusercontent.com (uc9d5eb2c72b2ea8dbe7872dd6c9.dl.dropboxusercontent.com)|162.125.8.15|:443... connected.
+HTTP request sent, awaiting response... 302 Found
+Location: /cd/0/inline2/CxDW0EXb3rGQdvEcXHxGvIei2haIhe38jGhJrgHSuZzv6r9HV4dOvIOa_jMxxssAvbrIFIleB257ASmlwljYoEpl2hjhBikztjS2ccH8_Dbff0X6YqHxQANW-5hSKuJi3Sl-ibw51DsDS7mo2_-z_zHSg1DEPKg4fX2nPmyPU8OF7GqO2AG0tFk3UIhA3wugur69rD64bchjo9G4CEWlu_8B0_vJbA77U95WKETMSzSkCIzL0g9I1KVlljDQ9qHdmNos_6-pxTgDB_tsX0iFeSs-tICxg7dop-J5TNL5nl5w4HiLPoXaK4hQe8xdeQWl7Um_0sbZNrnp6Dq8AN8-ADtmK_HcbwXTGN2H_ZcQqvAIPGrmcoRpZpr_47deiEKl0FU/file?dl=1 [following]
+--2025-09-09 14:22:16--  https://uc9d5eb2c72b2ea8dbe7872dd6c9.dl.dropboxusercontent.com/cd/0/inline2/CxDW0EXb3rGQdvEcXHxGvIei2haIhe38jGhJrgHSuZzv6r9HV4dOvIOa_jMxxssAvbrIFIleB257ASmlwljYoEpl2hjhBikztjS2ccH8_Dbff0X6YqHxQANW-5hSKuJi3Sl-ibw51DsDS7mo2_-z_zHSg1DEPKg4fX2nPmyPU8OF7GqO2AG0tFk3UIhA3wugur69rD64bchjo9G4CEWlu_8B0_vJbA77U95WKETMSzSkCIzL0g9I1KVlljDQ9qHdmNos_6-pxTgDB_tsX0iFeSs-tICxg7dop-J5TNL5nl5w4HiLPoXaK4hQe8xdeQWl7Um_0sbZNrnp6Dq8AN8-ADtmK_HcbwXTGN2H_ZcQqvAIPGrmcoRpZpr_47deiEKl0FU/file?dl=1
+Reusing existing connection to uc9d5eb2c72b2ea8dbe7872dd6c9.dl.dropboxusercontent.com:443.
+HTTP request sent, awaiting response... 200 OK
+Length: 81977417 (78M) [application/binary]
+Saving to: 'models/raft-things.pth'
+
+models/raft-things.pth                                100%[=========================================================================================================================>]  78.18M  93.4MB/s    in 0.8s
+
+2025-09-09 14:22:17 (93.4 MB/s) - 'models/raft-things.pth' saved [81977417/81977417]
+
+root@dffc89ac6e44:/workspace/RAFT# ls -lh models/raft-things.pth
+-rw-r--r-- 1 root root 79M Sep  9 14:22 models/raft-things.pth
+root@dffc89ac6e44:/workspace/RAFT# python demo.py --model=models/raft-things.pth --path=demo-frames
+Traceback (most recent call last):
+  File "/workspace/RAFT/demo.py", line 75, in <module>
+    demo(args)
+  File "/workspace/RAFT/demo.py", line 44, in demo
+    model.load_state_dict(torch.load(args.model))
+                          ^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/dist-packages/torch/serialization.py", line 1486, in load
+    with _open_zipfile_reader(opened_file) as opened_zipfile:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/dist-packages/torch/serialization.py", line 771, in __init__
+    super().__init__(torch._C.PyTorchFileReader(name_or_buffer))
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: Expected hasRecord("version") to be true, but got false.  (Could this error message be improved?  If so, please report an enhancement request to PyTorch.)
+root@dffc89ac6e44:/workspace/RAFT#

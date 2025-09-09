@@ -1,0 +1,159 @@
+(base) root@30fb68955ee8:/workspace/MotionVectorization# # إنشاء جميع symlinks المطلوبة لـ RAFT
+cd /workspace/MotionVectorization/RAFT
+ln -sf core/update.py update.py
+ln -sf core/corr.py corr.py
+ln -sf core/extractor.py extractor.py
+ln -sf core/raft.py raft.py
+ln -sf core/utils utils
+
+# اختبار RAFT imports
+python3 -c "
+import sys
+sys.path.append('.')
+sys.path.append('core')
+from core.raft import RAFT
+print('✅ RAFT imports fixed!')
+"
+
+# تشغيل المشروع
+cd /workspace/MotionVectorization
+./scripts/script.sh videos/test.txt
+✅ RAFT imports fixed!
+videos/test.txt
+PREPROCESS
+test1
+RAFT
+test1
+Using device: cuda
+GPU Name: NVIDIA RTX A6000
+GPU Memory: 50.9 GB
+Model loaded on cuda
+0it [00:00, ?it/s]/usr/local/lib/python3.11/dist-packages/torch/functional.py:504: UserWarning: torch.meshgrid: in an upcoming release, it will be required to pass the indexing argument. (Triggered internally at ../aten/src/ATen/native/TensorShape.cpp:3483.)
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+34it [00:30,  1.13it/s]
+videos/test.txt
+CLUSTER
+test1
+[WARNING] Configs file not found! Using default.json instead.
+Configs:
+  video_file:   test1.mp4
+  video_dir:    videos
+  output_dir:   motion_vectorization/outputs
+  start_frame:  0
+  max_frames:   300
+  bg_file:      None
+  bg_thresh:    0.1
+  lo_thresh:    30
+  hi_thresh:    100
+  max_radius:   3
+  add_contrast: True
+  link: False
+  min_cluster_size:     50
+  min_density:  0.15
+  min_dim:      5
+  config:       motion_vectorization/config/test1.json
+  suffix:       None
+  base_frame:   0
+  shapes:       None
+  num_match_shapes:     -1
+  main_match_thresh:    0.6
+  fallback_match_thresh:        0.6
+  single_match_thresh:  0.05
+  drop_thresh:  0.1
+  breaks:       []
+  multiply:     False
+  all_joint:    False
+  manual_init:  False
+  overlap_thresh:       0.5
+  init_thresh:  0.01
+  min_opt_size: 256
+  lr:   0.01
+  n_steps:      50
+  p_weight:     0.01
+  blur_kernel:  3
+  use_gpu:      False
+  bleed:        50
+  use_k:        True
+  use_r:        True
+  use_s:        True
+  use_t:        True
+  init_r:       True
+  init_s:       True
+  init_t:       True
+  snap_thresh:  3
+  scale_thresh: 0.03
+  angle_thresh: 0.0
+  verbose:      True
+100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 35/35 [00:17<00:00,  1.97it/s]
+TRACK
+Logging to motion_vectorization/logs/test1_track_8986.out
+TIME: 2025-09-09 22:08:17.889463
+[WARNING] Configs file not found! Using default.json instead.
+Configs:
+  video_file:   test1.mp4
+  video_dir:    videos
+  output_dir:   motion_vectorization/outputs
+  suffix:       None
+  config:       motion_vectorization/config/test1.json
+  max_frames:   300
+  start_frame:  0
+  base_frame:   0
+  min_cluster_size:     50
+  min_density:  0.15
+  bg_file:      None
+  main_match_thresh:    0.6
+  single_match_thresh:  0.05
+  num_match_shapes:     -1
+  fallback_match_thresh:        0.6
+  drop_thresh:  0.1
+  breaks:       []
+  multiply:     False
+  all_joint:    False
+  manual_init:  False
+  hungarian:    False
+  min_opt_size: 256
+  blur_kernel:  3
+  lr:   0.01
+  p_weight:     0.01
+  n_steps:      50
+  use_gpu:      False
+  bleed:        50
+  overlap_thresh:       0.5
+  use_k:        True
+  use_r:        True
+  use_s:        True
+  use_t:        True
+  init_r:       True
+  init_s:       True
+  init_t:       True
+  verbose:      True
+  shapes:       None
+  min_dim:      5
+  bg_thresh:    0.1
+  max_radius:   3
+  add_contrast: True
+  lo_thresh:    30
+  hi_thresh:    100
+  link: False
+  init_thresh:  0.01
+  snap_thresh:  3
+  scale_thresh: 0.03
+  angle_thresh: 0.0
+
+FRAME 1 (0) CLUSTERS
+========================
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/workspace/MotionVectorization/motion_vectorization/extract_shapes.py", line 1525, in <module>
+    main()
+  File "/workspace/MotionVectorization/motion_vectorization/extract_shapes.py", line 264, in main
+    bgr_mode = cv2.cvtColor(np.uint8(np.array(lab_mode[0])[None, None, ...]), cv2.COLOR_LAB2BGR).squeeze()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+cv2.error: OpenCV(4.11.0) /io/opencv/modules/imgproc/src/color.simd_helpers.hpp:92: error: (-15:Bad number of channels) in function 'cv::impl::{anonymous}::CvtHelper<VScn, VDcn, VDepth, sizePolicy>::CvtHelper(cv::InputArray, cv::OutputArray, int) [with VScn = cv::impl::{anonymous}::Set<3>; VDcn = cv::impl::{anonymous}::Set<3, 4>; VDepth = cv::impl::{anonymous}::Set<0, 5>; cv::impl::{anonymous}::SizePolicy sizePolicy = cv::impl::<unnamed>::NONE; cv::InputArray = const cv::_InputArray&; cv::OutputArray = const cv::_OutputArray&]'
+> Invalid number of channels in input image:
+>     'VScn::contains(scn)'
+> where
+>     'scn' is 1
+
+OPTIM

@@ -1,0 +1,187 @@
+(base) root@30fb68955ee8:/workspace/MotionVectorization# # الأمر الشامل - نفّذه دفعة واحدة
+pip install numpy==1.24.3 opencv-python scipy matplotlib pillow scikit-image tqdm kornia==0.6.12 drawsvg easing-functions pymatting pyefd networkx
+
+# أو إذا واجهت مشاكل، نفّذ هذا الأمر المطول:
+pip install --force-reinstall numpy==1.24.3 && \
+pip install opencv-python scipy matplotlib pillow scikit-image tqdm && \
+pip install kornia==0.6.12 drawsvg easing-functions pymatting pyefd networkx
+
+# إصلاح مشاكل RAFT imports
+cd /workspace/MotionVectorization/RAFT
+ln -sf /workspace/MotionVectorization/RAFT/core/update.py update.py
+ln -sf /workspace/MotionVectorization/RAFT/core/corr.py corr.py
+
+# اختبار التثبيت
+python3 -c "
+import numpy as np
+import cv2
+import torch
+import kornia
+import drawSvg
+print('✅ جميع المكتبات مثبتة بنجاح!')
+print('NumPy:', np.__version__)
+print('CUDA:', torch.cuda.is_available())
+"
+
+# تشغيل المشروع
+cd /workspace/MotionVectorization
+./scripts/script.sh videos/test.txt
+Collecting numpy==1.24.3
+  Downloading numpy-1.24.3-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (5.6 kB)
+Requirement already satisfied: opencv-python in /usr/local/lib/python3.11/dist-packages (4.12.0.88)
+Requirement already satisfied: scipy in /usr/local/lib/python3.11/dist-packages (1.16.1)
+Requirement already satisfied: matplotlib in /usr/local/lib/python3.11/dist-packages (3.10.6)
+Requirement already satisfied: pillow in /usr/local/lib/python3.11/dist-packages (11.0.0)
+Requirement already satisfied: scikit-image in /usr/local/lib/python3.11/dist-packages (0.25.2)
+Requirement already satisfied: tqdm in /usr/local/lib/python3.11/dist-packages (4.67.1)
+Collecting kornia==0.6.12
+  Downloading kornia-0.6.12-py2.py3-none-any.whl.metadata (12 kB)
+Collecting drawsvg
+  Downloading drawsvg-2.4.0-py3-none-any.whl.metadata (19 kB)
+Collecting easing-functions
+  Downloading easing_functions-1.0.4-py3-none-any.whl.metadata (1.6 kB)
+Collecting pymatting
+  Downloading pymatting-1.1.14-py3-none-any.whl.metadata (7.7 kB)
+Collecting pyefd
+  Downloading pyefd-1.6.0-py2.py3-none-any.whl.metadata (7.4 kB)
+Requirement already satisfied: networkx in /usr/local/lib/python3.11/dist-packages (3.4.2)
+Requirement already satisfied: packaging in /usr/local/lib/python3.11/dist-packages (from kornia==0.6.12) (24.2)
+Requirement already satisfied: torch>=1.9.1 in /usr/local/lib/python3.11/dist-packages (from kornia==0.6.12) (2.0.1+cu118)
+INFO: pip is looking at multiple versions of opencv-python to determine which version is compatible with other requirements. This could take a while.
+Collecting opencv-python
+  Downloading opencv_python-4.11.0.86-cp37-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (20 kB)
+INFO: pip is looking at multiple versions of scipy to determine which version is compatible with other requirements. This could take a while.
+Collecting scipy
+  Downloading scipy-1.16.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (61 kB)
+  Downloading scipy-1.15.3-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (61 kB)
+Requirement already satisfied: contourpy>=1.0.1 in /usr/local/lib/python3.11/dist-packages (from matplotlib) (1.3.3)
+Requirement already satisfied: cycler>=0.10 in /usr/local/lib/python3.11/dist-packages (from matplotlib) (0.12.1)
+Requirement already satisfied: fonttools>=4.22.0 in /usr/local/lib/python3.11/dist-packages (from matplotlib) (4.59.2)
+Requirement already satisfied: kiwisolver>=1.3.1 in /usr/local/lib/python3.11/dist-packages (from matplotlib) (1.4.9)
+Requirement already satisfied: pyparsing>=2.3.1 in /usr/lib/python3/dist-packages (from matplotlib) (2.4.7)
+Requirement already satisfied: python-dateutil>=2.7 in /usr/local/lib/python3.11/dist-packages (from matplotlib) (2.9.0.post0)
+Requirement already satisfied: imageio!=2.35.0,>=2.33 in /usr/local/lib/python3.11/dist-packages (from scikit-image) (2.37.0)
+Requirement already satisfied: tifffile>=2022.8.12 in /usr/local/lib/python3.11/dist-packages (from scikit-image) (2025.8.28)
+Requirement already satisfied: lazy-loader>=0.4 in /usr/local/lib/python3.11/dist-packages (from scikit-image) (0.4)
+Collecting numba!=0.49.0 (from pymatting)
+  Downloading numba-0.61.2-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (2.8 kB)
+INFO: pip is looking at multiple versions of contourpy to determine which version is compatible with other requirements. This could take a while.
+Collecting contourpy>=1.0.1 (from matplotlib)
+  Downloading contourpy-1.3.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (5.5 kB)
+Collecting llvmlite<0.45,>=0.44.0dev0 (from numba!=0.49.0->pymatting)
+  Downloading llvmlite-0.44.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (4.8 kB)
+Requirement already satisfied: six>=1.5 in /usr/lib/python3/dist-packages (from python-dateutil>=2.7->matplotlib) (1.16.0)
+Requirement already satisfied: filelock in /usr/local/lib/python3.11/dist-packages (from torch>=1.9.1->kornia==0.6.12) (3.16.1)
+Requirement already satisfied: typing-extensions in /usr/local/lib/python3.11/dist-packages (from torch>=1.9.1->kornia==0.6.12) (4.12.2)
+Requirement already satisfied: sympy in /usr/local/lib/python3.11/dist-packages (from torch>=1.9.1->kornia==0.6.12) (1.13.3)
+Requirement already satisfied: jinja2 in /usr/local/lib/python3.11/dist-packages (from torch>=1.9.1->kornia==0.6.12) (3.1.4)
+Requirement already satisfied: triton==2.0.0 in /usr/local/lib/python3.11/dist-packages (from torch>=1.9.1->kornia==0.6.12) (2.0.0)
+Requirement already satisfied: cmake in /usr/local/lib/python3.11/dist-packages (from triton==2.0.0->torch>=1.9.1->kornia==0.6.12) (3.25.0)
+Requirement already satisfied: lit in /usr/local/lib/python3.11/dist-packages (from triton==2.0.0->torch>=1.9.1->kornia==0.6.12) (15.0.7)
+Requirement already satisfied: MarkupSafe>=2.0 in /usr/local/lib/python3.11/dist-packages (from jinja2->torch>=1.9.1->kornia==0.6.12) (2.1.5)
+Requirement already satisfied: mpmath<1.4,>=1.1.0 in /usr/local/lib/python3.11/dist-packages (from sympy->torch>=1.9.1->kornia==0.6.12) (1.3.0)
+Downloading numpy-1.24.3-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (17.3 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 17.3/17.3 MB 117.1 MB/s  0:00:00
+Downloading kornia-0.6.12-py2.py3-none-any.whl (653 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 653.4/653.4 kB 77.4 MB/s  0:00:00
+Downloading opencv_python-4.11.0.86-cp37-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (63.0 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 63.0/63.0 MB 160.1 MB/s  0:00:00
+Downloading scipy-1.15.3-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (37.7 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 37.7/37.7 MB 135.5 MB/s  0:00:00
+Downloading drawsvg-2.4.0-py3-none-any.whl (44 kB)
+Downloading easing_functions-1.0.4-py3-none-any.whl (15 kB)
+Downloading pymatting-1.1.14-py3-none-any.whl (54 kB)
+Downloading pyefd-1.6.0-py2.py3-none-any.whl (7.7 kB)
+Downloading contourpy-1.3.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (326 kB)
+Downloading numba-0.61.2-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (3.8 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3.8/3.8 MB 182.2 MB/s  0:00:00
+Downloading llvmlite-0.44.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (42.4 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 42.4/42.4 MB 154.1 MB/s  0:00:00
+Installing collected packages: easing-functions, drawsvg, numpy, llvmlite, scipy, pyefd, opencv-python, numba, contourpy, pymatting, kornia
+  Attempting uninstall: numpy
+    Found existing installation: numpy 2.1.2
+    Uninstalling numpy-2.1.2:
+      Successfully uninstalled numpy-2.1.2
+  Attempting uninstall: scipy
+    Found existing installation: scipy 1.16.1
+    Uninstalling scipy-1.16.1:
+      Successfully uninstalled scipy-1.16.1
+  Attempting uninstall: opencv-python
+    Found existing installation: opencv-python 4.12.0.88
+    Uninstalling opencv-python-4.12.0.88:
+      Successfully uninstalled opencv-python-4.12.0.88
+  Attempting uninstall: contourpy
+    Found existing installation: contourpy 1.3.3
+    Uninstalling contourpy-1.3.3:
+      Successfully uninstalled contourpy-1.3.3
+Successfully installed contourpy-1.3.2 drawsvg-2.4.0 easing-functions-1.0.4 kornia-0.6.12 llvmlite-0.44.0 numba-0.61.2 numpy-1.24.3 opencv-python-4.11.0.86 pyefd-1.6.0 pymatting-1.1.14 scipy-1.15.3
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+Collecting numpy==1.24.3
+  Using cached numpy-1.24.3-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (5.6 kB)
+Using cached numpy-1.24.3-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (17.3 MB)
+Installing collected packages: numpy
+  Attempting uninstall: numpy
+    Found existing installation: numpy 1.24.3
+    Uninstalling numpy-1.24.3:
+      Successfully uninstalled numpy-1.24.3
+Successfully installed numpy-1.24.3
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+Requirement already satisfied: opencv-python in /usr/local/lib/python3.11/dist-packages (4.11.0.86)
+Requirement already satisfied: scipy in /usr/local/lib/python3.11/dist-packages (1.15.3)
+Requirement already satisfied: matplotlib in /usr/local/lib/python3.11/dist-packages (3.10.6)
+Requirement already satisfied: pillow in /usr/local/lib/python3.11/dist-packages (11.0.0)
+Requirement already satisfied: scikit-image in /usr/local/lib/python3.11/dist-packages (0.25.2)
+Requirement already satisfied: tqdm in /usr/local/lib/python3.11/dist-packages (4.67.1)
+Requirement already satisfied: numpy>=1.21.2 in /usr/local/lib/python3.11/dist-packages (from opencv-python) (1.24.3)
+Requirement already satisfied: contourpy>=1.0.1 in /usr/local/lib/python3.11/dist-packages (from matplotlib) (1.3.2)
+Requirement already satisfied: cycler>=0.10 in /usr/local/lib/python3.11/dist-packages (from matplotlib) (0.12.1)
+Requirement already satisfied: fonttools>=4.22.0 in /usr/local/lib/python3.11/dist-packages (from matplotlib) (4.59.2)
+Requirement already satisfied: kiwisolver>=1.3.1 in /usr/local/lib/python3.11/dist-packages (from matplotlib) (1.4.9)
+Requirement already satisfied: packaging>=20.0 in /usr/local/lib/python3.11/dist-packages (from matplotlib) (24.2)
+Requirement already satisfied: pyparsing>=2.3.1 in /usr/lib/python3/dist-packages (from matplotlib) (2.4.7)
+Requirement already satisfied: python-dateutil>=2.7 in /usr/local/lib/python3.11/dist-packages (from matplotlib) (2.9.0.post0)
+Requirement already satisfied: networkx>=3.0 in /usr/local/lib/python3.11/dist-packages (from scikit-image) (3.4.2)
+Requirement already satisfied: imageio!=2.35.0,>=2.33 in /usr/local/lib/python3.11/dist-packages (from scikit-image) (2.37.0)
+Requirement already satisfied: tifffile>=2022.8.12 in /usr/local/lib/python3.11/dist-packages (from scikit-image) (2025.8.28)
+Requirement already satisfied: lazy-loader>=0.4 in /usr/local/lib/python3.11/dist-packages (from scikit-image) (0.4)
+Requirement already satisfied: six>=1.5 in /usr/lib/python3/dist-packages (from python-dateutil>=2.7->matplotlib) (1.16.0)
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+Requirement already satisfied: kornia==0.6.12 in /usr/local/lib/python3.11/dist-packages (0.6.12)
+Requirement already satisfied: drawsvg in /usr/local/lib/python3.11/dist-packages (2.4.0)
+Requirement already satisfied: easing-functions in /usr/local/lib/python3.11/dist-packages (1.0.4)
+Requirement already satisfied: pymatting in /usr/local/lib/python3.11/dist-packages (1.1.14)
+Requirement already satisfied: pyefd in /usr/local/lib/python3.11/dist-packages (1.6.0)
+Requirement already satisfied: networkx in /usr/local/lib/python3.11/dist-packages (3.4.2)
+Requirement already satisfied: packaging in /usr/local/lib/python3.11/dist-packages (from kornia==0.6.12) (24.2)
+Requirement already satisfied: torch>=1.9.1 in /usr/local/lib/python3.11/dist-packages (from kornia==0.6.12) (2.0.1+cu118)
+Requirement already satisfied: numpy>=1.16.0 in /usr/local/lib/python3.11/dist-packages (from pymatting) (1.24.3)
+Requirement already satisfied: pillow>=5.2.0 in /usr/local/lib/python3.11/dist-packages (from pymatting) (11.0.0)
+Requirement already satisfied: numba!=0.49.0 in /usr/local/lib/python3.11/dist-packages (from pymatting) (0.61.2)
+Requirement already satisfied: scipy>=1.1.0 in /usr/local/lib/python3.11/dist-packages (from pymatting) (1.15.3)
+Requirement already satisfied: llvmlite<0.45,>=0.44.0dev0 in /usr/local/lib/python3.11/dist-packages (from numba!=0.49.0->pymatting) (0.44.0)
+Requirement already satisfied: filelock in /usr/local/lib/python3.11/dist-packages (from torch>=1.9.1->kornia==0.6.12) (3.16.1)
+Requirement already satisfied: typing-extensions in /usr/local/lib/python3.11/dist-packages (from torch>=1.9.1->kornia==0.6.12) (4.12.2)
+Requirement already satisfied: sympy in /usr/local/lib/python3.11/dist-packages (from torch>=1.9.1->kornia==0.6.12) (1.13.3)
+Requirement already satisfied: jinja2 in /usr/local/lib/python3.11/dist-packages (from torch>=1.9.1->kornia==0.6.12) (3.1.4)
+Requirement already satisfied: triton==2.0.0 in /usr/local/lib/python3.11/dist-packages (from torch>=1.9.1->kornia==0.6.12) (2.0.0)
+Requirement already satisfied: cmake in /usr/local/lib/python3.11/dist-packages (from triton==2.0.0->torch>=1.9.1->kornia==0.6.12) (3.25.0)
+Requirement already satisfied: lit in /usr/local/lib/python3.11/dist-packages (from triton==2.0.0->torch>=1.9.1->kornia==0.6.12) (15.0.7)
+Requirement already satisfied: MarkupSafe>=2.0 in /usr/local/lib/python3.11/dist-packages (from jinja2->torch>=1.9.1->kornia==0.6.12) (2.1.5)
+Requirement already satisfied: mpmath<1.4,>=1.1.0 in /usr/local/lib/python3.11/dist-packages (from sympy->torch>=1.9.1->kornia==0.6.12) (1.3.0)
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+Traceback (most recent call last):
+  File "<string>", line 6, in <module>
+ModuleNotFoundError: No module named 'drawSvg'
+videos/test.txt
+PREPROCESS
+test1
+RAFT
+test1
+Traceback (most recent call last):
+  File "/workspace/MotionVectorization/RAFT/extract_flow.py", line 13, in <module>
+    from core.raft import RAFT
+  File "/workspace/MotionVectorization/RAFT/core/raft.py", line 7, in <module>
+    from extractor import BasicEncoder, SmallEncoder
+ModuleNotFoundError: No module named 'extractor'
+videos/test.txt
+CLUSTER

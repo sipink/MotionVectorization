@@ -1,0 +1,42 @@
+(motion_vectorization) root@30fb68955ee8:/workspace/MotionVectorization# cd /workspace/MotionVectorization
+export PYTHONPATH="/workspace/MotionVectorization:$PYTHONPATH"
+
+# بدلاً من python3 -m RAFT.extract_flow، جرب:
+cd RAFT
+python3 extract_flow.py --path "../videos/test1" --model "models/raft-sintel.pth" --max_frames 300 --add_back
+python3: can't open file 'extract_flow.py': [Errno 2] No such file or directory
+(motion_vectorization) root@30fb68955ee8:/workspace/MotionVectorization/RAFT# cd /workspace/MotionVectorization
+
+# عدّل ملف extract_flow.py مؤقتاً
+sed -i 's/from \.core\.raft import RAFT/from core.raft import RAFT/' RAFT/extract_flow.py
+sed -i 's/from \.core\.utils import flow_viz/from core.utils import flow_viz/' RAFT/extract_flow.py
+sed -i 's/from \.core\.utils\.utils import InputPadder/from core.utils.utils import InputPadder/' RAFT/extract_flow.py
+
+# الآن جرب تشغيله
+cd RAFT
+python3 extract_flow.py --path "../videos/test1" --model "models/raft-sintel.pth" --max_frames 300 --add_back
+sed: can't read RAFT/extract_flow.py: No such file or directory
+sed: can't read RAFT/extract_flow.py: No such file or directory
+sed: can't read RAFT/extract_flow.py: No such file or directory
+python3: can't open file 'extract_flow.py': [Errno 2] No such file or directory
+(motion_vectorization) root@30fb68955ee8:/workspace/MotionVectorization/RAFT# cd /workspace/MotionVectorization
+
+# إنشاء سكريبت مساعد
+cat > run_raft.py << 'EOF'
+import sys
+import os
+sys.path.insert(0, '/workspace/MotionVectorization')
+sys.path.insert(0, '/workspace/MotionVectorization/RAFT')
+os.chdir('/workspace/MotionVectorization/RAFT')
+
+# تشغيل extract_flow مباشرة
+exec(open('extract_flow.py').read())
+EOF
+
+# تشغيل السكريبت مع المعاملات
+python3 run_raft.py --path "videos/test1" --model "RAFT/models/raft-sintel.pth" --max_frames 300 --add_back
+Traceback (most recent call last):
+  File "run_raft.py", line 8, in <module>
+    exec(open('extract_flow.py').read())
+FileNotFoundError: [Errno 2] No such file or directory: 'extract_flow.py'
+(motion_vectorization) root@30fb68955ee8:/workspace/MotionVectorization# 

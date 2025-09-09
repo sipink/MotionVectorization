@@ -1,0 +1,44 @@
+(motion_vectorization) root@30fb68955ee8:/workspace/MotionVectorization# # تحقق من توفر GPU
+nvidia-smi
+
+# تحقق من إعدادات PyTorch
+python3 -c "import torch; print('CUDA available:', torch.cuda.is_available())"
+python3 -c "import torch; print('CUDA devices:', torch.cuda.device_count())"
+python3 -c "import torch; print('Current device:', torch.cuda.current_device() if torch.cuda.is_available() else 'CPU')"
+Tue Sep  9 21:24:40 2025       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 570.133.20             Driver Version: 570.133.20     CUDA Version: 12.8     |
+|-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA RTX A6000               On  |   00000000:0F:00.0 Off |                  Off |
+| 30%   26C    P8             21W /  300W |       0MiB /  49140MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+                                                                                         
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+CUDA available: True
+CUDA devices: 1
+Current device: 0
+(motion_vectorization) root@30fb68955ee8:/workspace/MotionVectorization# cd /workspace/MotionVectorization/RAFT
+
+# تشغيل مع GPU مباشرة (تجاهل التحقق)
+python3 -c "
+import torch
+print('CUDA check:', torch.cuda.is_available())
+if torch.cuda.is_available():
+    print('GPU Name:', torch.cuda.get_device_name(0))
+    print('Memory:', torch.cuda.get_device_properties(0).total_memory / 1e9, 'GB')
+"
+CUDA check: True
+GPU Name: NVIDIA RTX A6000
+Memory: 50.908823552 GB
+(motion_vectorization) root@30fb68955ee8:/workspace/MotionVectorization/RAFT# 

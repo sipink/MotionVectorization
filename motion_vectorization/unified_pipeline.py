@@ -29,17 +29,14 @@ from concurrent.futures import ThreadPoolExecutor
 import psutil
 import gc
 
-# Import all three engines and bridges
-try:
-    from .sam2_engine import SAM2SegmentationEngine, SAM2Config
-    from .cotracker3_engine import CoTracker3TrackerEngine, CoTracker3Config
-    from .flowseek_engine import FlowSeekEngine, FlowSeekConfig, MotionBasisDecomposer
-    from .sam2_cotracker_bridge import SAM2CoTrackerBridge, BridgeConfig
-    from .sam2_flowseek_bridge import SAM2FlowSeekBridge, SAM2FlowSeekBridgeConfig
-    ENGINES_AVAILABLE = True
-except ImportError as e:
-    ENGINES_AVAILABLE = False
-    warnings.warn(f"Unified pipeline engines not available: {e}")
+# Import all three engines and bridges (direct imports for LSP compatibility)
+from .sam2_engine import SAM2SegmentationEngine, SAM2Config
+from .cotracker3_engine import CoTracker3TrackerEngine, CoTracker3Config
+from .flowseek_engine import FlowSeekEngine, FlowSeekConfig, MotionBasisDecomposer
+from .sam2_cotracker_bridge import SAM2CoTrackerBridge, BridgeConfig
+from .sam2_flowseek_bridge import SAM2FlowSeekBridge, SAM2FlowSeekBridgeConfig
+
+ENGINES_AVAILABLE = True
 
 
 @dataclass

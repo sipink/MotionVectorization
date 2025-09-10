@@ -392,8 +392,8 @@ def main():
         cx, cy = get_shape_centroid(curr_shape[:, :, 3])
         curr_centroids.append([cx, cy])
 
-      # Enhanced tracking with individual engines
-      tracking_method = "legacy"
+      # Enhanced tracking with modern engines (CoTracker3 primary, robust fallbacks)
+      tracking_method = "cotracker3" if (arg.use_cotracker3 and processor.use_cotracker3) else "enhanced_rgb"
       
       # Use CoTracker3 for superior tracking if enabled
       if arg.use_cotracker3 and processor.use_cotracker3:
@@ -413,22 +413,22 @@ def main():
             print(f"   CoTracker3 quality scores: {[f'{k}:{v:.3f}' for k, v in cotracker3_quality_scores.items()]}")
             print(f"   Average quality: {avg_quality:.1%}")
             if avg_quality < arg.quality_threshold and arg.progressive_fallback:
-              print(f"   ⚠️ Quality below threshold ({arg.quality_threshold:.1%}), falling back to legacy tracking")
-              tracking_method = "legacy"
+              print(f"   ⚠️ Quality below threshold ({arg.quality_threshold:.1%}), using enhanced RGB analysis")
+              tracking_method = "enhanced_rgb"
           else:
-            print(f"   ⚠️ CoTracker3 tracking failed, falling back to legacy tracking")
-            tracking_method = "legacy"
+            print(f"   ⚠️ CoTracker3 tracking failed, using enhanced RGB analysis")
+            tracking_method = "enhanced_rgb"
         except Exception as e:
           print(f"   ❌ CoTracker3 tracking error: {e}")
           if not arg.progressive_fallback:
             raise e
-          print(f"   🔄 Falling back to legacy tracking")
-          tracking_method = "legacy"
+          print(f"   🔄 Using enhanced RGB analysis fallback")
+          tracking_method = "enhanced_rgb"
       
-      # Fallback to legacy tracking
-      if tracking_method == "legacy":
-        print("🔧 Using legacy appearance-based shape matching")
-        shape_diffs, rgb_diffs = processor.get_appearance_graphs(
+      # Use enhanced RGB analysis if CoTracker3 unavailable
+      if tracking_method == "enhanced_rgb":
+        print("🔧 Using enhanced RGB-based shape analysis")
+        shape_diffs, rgb_diffs = processor.get_cotracker3_appearance_analysis(
           prev_shapes, curr_shapes, prev_centroids, curr_centroids)
       appearance_t1 = time.perf_counter()
       print(f'[TIME] Appearance-based matching took {appearance_t1 - appearance_t0:.2f}s')
@@ -537,18 +537,19 @@ def main():
           cx, cy = get_shape_centroid(unmatched_curr_shape[:, :, 3])
           unmatched_curr_centroids.append([cx / curr_frame.shape[1], cy / curr_frame.shape[0]])
 
-        # Use CoTracker3 enhanced fallback matching if enabled
+        # Use advanced fallback matching with CoTracker3 features when available
         if arg.use_cotracker3 and processor.use_cotracker3:
-          print("🔄 Using CoTracker3 enhanced fallback matching")
-          fallback_matching, costs = processor.cotracker3_fallback_matching(
+          print("🎯 CoTracker3 enhanced fallback matching")
+          fallback_matching, costs, confidence_scores = processor.cotracker3_fallback_matching(
             unmatched_prev_shapes, unmatched_curr_shapes, 
             unmatched_prev_centroids, unmatched_curr_centroids, 
             frame_width, frame_height,
             thresh=arg.fallback_match_thresh
           )
+          print(f"   Fallback confidence scores: {confidence_scores}")
         else:
-          # Use original fallback matching
-          fallback_matching, costs = processor.fallback_matching(
+          print("🔧 Using enhanced RGB-based fallback matching")
+          fallback_matching, costs, confidence_scores = processor.cotracker3_fallback_matching(
             unmatched_prev_shapes, unmatched_curr_shapes, 
             unmatched_prev_centroids, unmatched_curr_centroids, 
             frame_width, frame_height,
@@ -557,6 +558,7 @@ def main():
         fallback_t1 = time.perf_counter()
         print('[NOTE] Fallback matches:', fallback_matching)
         print('[NOTE] Fallback matching costs:\n', costs)
+        print('[NOTE] Fallback confidence scores:', confidence_scores if 'confidence_scores' in locals() else 'N/A')
         print(f'[TIME] Fallback matching took {fallback_t1 - fallback_t0:.2f}s')
 
         # Update main matches.

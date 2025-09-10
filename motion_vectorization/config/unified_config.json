@@ -1,0 +1,457 @@
+{
+  "unified_pipeline_presets": {
+    "speed": {
+      "description": "Maximum speed optimization - 60 FPS target",
+      "mode": "speed",
+      "performance_targets": {
+        "target_fps": 60.0,
+        "quality_threshold": 0.75,
+        "overall_quality_target": 0.80
+      },
+      "device_settings": {
+        "device": "auto",
+        "mixed_precision": true,
+        "compile_optimization": true,
+        "multi_gpu": false,
+        "memory_efficient": true,
+        "batch_size": 4
+      },
+      "sam2_config": {
+        "model_cfg": "sam2_hiera_s.yaml",
+        "model_variant": "small",
+        "mixed_precision": true,
+        "compile_model": true,
+        "accuracy_threshold": 0.80,
+        "vos_optimized": true,
+        "batch_size": 4,
+        "target_fps": 60.0
+      },
+      "cotracker3_config": {
+        "model_variant": "cotracker3_online",
+        "grid_size": 30,
+        "max_points": 900,
+        "mixed_precision": true,
+        "compile_model": true,
+        "memory_efficient": true,
+        "max_sequence_length": 50,
+        "tracking_threshold": 0.75,
+        "temporal_consistency": 0.7
+      },
+      "flowseek_config": {
+        "adaptive_complexity": true,
+        "searaft_fallback": true,
+        "depth_integration": false,
+        "iters": 8,
+        "mixed_precision": true,
+        "compile_model": true,
+        "target_accuracy": 0.80,
+        "complexity_threshold": 0.5
+      },
+      "cross_validation": {
+        "enable_cross_validation": false,
+        "tracking_flow_validation": false,
+        "confidence_weighting": false
+      },
+      "optimization": {
+        "pipeline_parallelization": true,
+        "progressive_fallback": true,
+        "memory_pool_size_mb": 4096
+      }
+    },
+    
+    "balanced": {
+      "description": "Balanced speed and accuracy - 44 FPS target with 85%+ quality",
+      "mode": "balanced",
+      "performance_targets": {
+        "target_fps": 44.0,
+        "quality_threshold": 0.85,
+        "overall_quality_target": 0.90
+      },
+      "device_settings": {
+        "device": "auto",
+        "mixed_precision": true,
+        "compile_optimization": true,
+        "multi_gpu": false,
+        "memory_efficient": true,
+        "batch_size": 2
+      },
+      "sam2_config": {
+        "model_cfg": "sam2_hiera_l.yaml",
+        "model_variant": "large",
+        "mixed_precision": true,
+        "compile_model": true,
+        "accuracy_threshold": 0.90,
+        "vos_optimized": true,
+        "batch_size": 2,
+        "target_fps": 44.0
+      },
+      "cotracker3_config": {
+        "model_variant": "cotracker3_offline",
+        "grid_size": 40,
+        "max_points": 1600,
+        "mixed_precision": true,
+        "compile_model": true,
+        "memory_efficient": true,
+        "max_sequence_length": 100,
+        "tracking_threshold": 0.85,
+        "temporal_consistency": 0.9,
+        "occlusion_recovery": true
+      },
+      "flowseek_config": {
+        "adaptive_complexity": true,
+        "depth_integration": true,
+        "iters": 12,
+        "mixed_precision": true,
+        "compile_model": true,
+        "target_accuracy": 0.90,
+        "motion_bases_dim": 6,
+        "complexity_threshold": 0.7
+      },
+      "cross_validation": {
+        "enable_cross_validation": true,
+        "tracking_flow_validation": true,
+        "segmentation_tracking_validation": true,
+        "confidence_weighting": true
+      },
+      "optimization": {
+        "pipeline_parallelization": true,
+        "progressive_fallback": true,
+        "memory_pool_size_mb": 6144
+      }
+    },
+    
+    "accuracy": {
+      "description": "Maximum accuracy optimization - 30 FPS with 95%+ quality target",
+      "mode": "accuracy",
+      "performance_targets": {
+        "target_fps": 30.0,
+        "quality_threshold": 0.95,
+        "overall_quality_target": 0.95
+      },
+      "device_settings": {
+        "device": "auto",
+        "mixed_precision": false,
+        "compile_optimization": true,
+        "multi_gpu": true,
+        "memory_efficient": false,
+        "batch_size": 1
+      },
+      "sam2_config": {
+        "model_cfg": "sam2_hiera_l.yaml",
+        "model_variant": "large",
+        "mixed_precision": false,
+        "compile_model": true,
+        "accuracy_threshold": 0.98,
+        "vos_optimized": false,
+        "batch_size": 1,
+        "target_fps": 30.0,
+        "max_obj_ptrs_in_encoder": 32
+      },
+      "cotracker3_config": {
+        "model_variant": "cotracker3_offline",
+        "grid_size": 50,
+        "max_points": 2500,
+        "mixed_precision": false,
+        "compile_model": true,
+        "memory_efficient": false,
+        "max_sequence_length": 200,
+        "tracking_threshold": 0.95,
+        "temporal_consistency": 0.95,
+        "occlusion_recovery": true,
+        "accuracy_target": 0.98
+      },
+      "flowseek_config": {
+        "adaptive_complexity": false,
+        "depth_integration": true,
+        "iters": 16,
+        "mixed_precision": false,
+        "compile_model": true,
+        "target_accuracy": 0.95,
+        "motion_bases_dim": 6,
+        "corr_levels": 5,
+        "corr_radius": 6,
+        "searaft_fallback": false
+      },
+      "cross_validation": {
+        "enable_cross_validation": true,
+        "tracking_flow_validation": true,
+        "segmentation_tracking_validation": true,
+        "confidence_weighting": true,
+        "min_segmentation_quality": 0.90,
+        "min_tracking_quality": 0.85,
+        "min_flow_quality": 0.80
+      },
+      "optimization": {
+        "pipeline_parallelization": true,
+        "progressive_fallback": true,
+        "memory_pool_size_mb": 8192,
+        "enable_async_processing": true
+      }
+    }
+  },
+
+  "runpod_gpu_optimizations": {
+    "description": "Optimized settings for RunPod GPU environments",
+    "gpu_specific_settings": {
+      "RTX_4090": {
+        "memory_pool_size_mb": 16384,
+        "batch_size_multiplier": 2.0,
+        "mixed_precision_recommended": true,
+        "tensor_cores": true,
+        "compute_capability": "8.9"
+      },
+      "RTX_3090": {
+        "memory_pool_size_mb": 12288,
+        "batch_size_multiplier": 1.5,
+        "mixed_precision_recommended": true,
+        "tensor_cores": true,
+        "compute_capability": "8.6"
+      },
+      "A100": {
+        "memory_pool_size_mb": 32768,
+        "batch_size_multiplier": 4.0,
+        "mixed_precision_recommended": true,
+        "tensor_cores": true,
+        "compute_capability": "8.0",
+        "multi_gpu_recommended": true
+      },
+      "V100": {
+        "memory_pool_size_mb": 8192,
+        "batch_size_multiplier": 1.0,
+        "mixed_precision_recommended": true,
+        "tensor_cores": true,
+        "compute_capability": "7.0"
+      }
+    },
+    "environment_variables": {
+      "CUDA_LAUNCH_BLOCKING": "0",
+      "TORCH_CUDNN_V8_API_ENABLED": "1",
+      "CUDNN_BENCHMARK": "1",
+      "OMP_NUM_THREADS": "4",
+      "PYTORCH_CUDA_ALLOC_CONF": "max_split_size_mb:128",
+      "CUDA_CACHE_MAXSIZE": "2147483648",
+      "TORCH_USE_CUDA_DSA": "1"
+    }
+  },
+
+  "quality_benchmarks": {
+    "description": "Expected quality benchmarks for different content types",
+    "content_types": {
+      "motion_graphics": {
+        "description": "Clean motion graphics with distinct objects",
+        "expected_quality": {
+          "segmentation": 0.95,
+          "tracking": 0.92,
+          "optical_flow": 0.88,
+          "overall": 0.92
+        },
+        "recommended_mode": "balanced"
+      },
+      "natural_video": {
+        "description": "Natural scenes with complex textures",
+        "expected_quality": {
+          "segmentation": 0.88,
+          "tracking": 0.85,
+          "optical_flow": 0.82,
+          "overall": 0.85
+        },
+        "recommended_mode": "accuracy"
+      },
+      "animated_content": {
+        "description": "2D/3D animated content",
+        "expected_quality": {
+          "segmentation": 0.93,
+          "tracking": 0.90,
+          "optical_flow": 0.86,
+          "overall": 0.90
+        },
+        "recommended_mode": "balanced"
+      },
+      "simple_shapes": {
+        "description": "Simple geometric shapes",
+        "expected_quality": {
+          "segmentation": 0.97,
+          "tracking": 0.95,
+          "optical_flow": 0.92,
+          "overall": 0.95
+        },
+        "recommended_mode": "speed"
+      }
+    }
+  },
+
+  "fallback_configurations": {
+    "description": "Fallback settings when unified pipeline components fail",
+    "progressive_fallback_chain": [
+      {
+        "level": 1,
+        "description": "Unified pipeline with all engines",
+        "engines": ["sam2", "cotracker3", "flowseek"],
+        "quality_threshold": 0.85
+      },
+      {
+        "level": 2,
+        "description": "Individual engines without unified coordination",
+        "engines": ["sam2", "cotracker3"],
+        "quality_threshold": 0.80
+      },
+      {
+        "level": 3,
+        "description": "Enhanced legacy with CoTracker3",
+        "engines": ["cotracker3"],
+        "quality_threshold": 0.70
+      },
+      {
+        "level": 4,
+        "description": "Legacy primitive methods",
+        "engines": [],
+        "quality_threshold": 0.50
+      }
+    ],
+    "fallback_triggers": {
+      "gpu_memory_limit_exceeded": true,
+      "engine_initialization_failure": true,
+      "processing_timeout": true,
+      "quality_below_threshold": true,
+      "cuda_out_of_memory": true
+    }
+  },
+
+  "performance_monitoring": {
+    "description": "Performance monitoring and optimization settings",
+    "metrics_to_track": [
+      "fps",
+      "gpu_utilization",
+      "memory_usage",
+      "quality_scores",
+      "processing_time_per_frame",
+      "engine_utilization",
+      "fallback_frequency"
+    ],
+    "optimization_triggers": {
+      "low_gpu_utilization": {
+        "threshold": 0.60,
+        "action": "increase_batch_size"
+      },
+      "high_memory_usage": {
+        "threshold": 0.90,
+        "action": "reduce_batch_size"
+      },
+      "low_quality_score": {
+        "threshold": 0.80,
+        "action": "switch_to_accuracy_mode"
+      },
+      "low_fps": {
+        "threshold_ratio": 0.70,
+        "action": "switch_to_speed_mode"
+      }
+    }
+  },
+
+  "cli_defaults": {
+    "description": "Default CLI argument values for unified pipeline",
+    "video_processing": {
+      "max_frames": -1,
+      "start_frame": 0,
+      "base_frame": 0,
+      "use_unified_pipeline": true,
+      "unified_mode": "balanced",
+      "progressive_fallback": true,
+      "quality_threshold": 0.85,
+      "benchmark_performance": false
+    },
+    "output_settings": {
+      "output_dir": "motion_vectorization/outputs",
+      "save_intermediate_results": false,
+      "save_visualizations": true,
+      "verbose_logging": true
+    },
+    "engine_settings": {
+      "unified_device": "auto",
+      "use_cotracker3": false,
+      "use_sam2": false,
+      "use_flowseek": false,
+      "cotracker3_mode": "offline",
+      "cotracker3_grid_size": 40,
+      "sam2_model": "large",
+      "flowseek_depth_integration": true
+    }
+  },
+
+  "validation_tests": {
+    "description": "Validation tests to ensure unified pipeline is working correctly",
+    "smoke_tests": {
+      "engine_imports": [
+        "motion_vectorization.unified_pipeline",
+        "motion_vectorization.sam2_engine", 
+        "motion_vectorization.cotracker3_engine",
+        "motion_vectorization.flowseek_engine"
+      ],
+      "gpu_availability": true,
+      "memory_allocation_test": true,
+      "dummy_processing_test": true
+    },
+    "performance_tests": {
+      "fps_benchmark": {
+        "min_fps_speed_mode": 45,
+        "min_fps_balanced_mode": 35,
+        "min_fps_accuracy_mode": 25
+      },
+      "quality_benchmark": {
+        "min_quality_speed_mode": 0.75,
+        "min_quality_balanced_mode": 0.85,
+        "min_quality_accuracy_mode": 0.92
+      },
+      "memory_efficiency": {
+        "max_memory_usage_gb": 16,
+        "memory_leak_tolerance": 0.05
+      }
+    }
+  },
+
+  "troubleshooting": {
+    "description": "Common issues and solutions",
+    "common_issues": {
+      "cuda_out_of_memory": {
+        "symptoms": ["CUDA out of memory", "RuntimeError"],
+        "solutions": [
+          "Reduce batch_size to 1",
+          "Enable memory_efficient mode", 
+          "Use mixed_precision",
+          "Reduce grid_size for CoTracker3",
+          "Use speed mode instead of accuracy mode"
+        ]
+      },
+      "low_quality_results": {
+        "symptoms": ["Quality below threshold", "Poor tracking"],
+        "solutions": [
+          "Switch to accuracy mode",
+          "Disable mixed_precision",
+          "Increase grid_size for CoTracker3",
+          "Enable depth_integration for FlowSeek",
+          "Check input video quality"
+        ]
+      },
+      "slow_processing": {
+        "symptoms": ["Low FPS", "High processing time"],
+        "solutions": [
+          "Switch to speed mode",
+          "Enable mixed_precision",
+          "Reduce max_frames for testing",
+          "Check GPU utilization",
+          "Enable compile_optimization"
+        ]
+      },
+      "engine_initialization_failure": {
+        "symptoms": ["Import errors", "Model loading failures"],
+        "solutions": [
+          "Run install_gpu_dependencies.sh",
+          "Check CUDA installation",
+          "Verify internet connection for model downloads",
+          "Clear torch hub cache",
+          "Use progressive_fallback"
+        ]
+      }
+    }
+  }
+}

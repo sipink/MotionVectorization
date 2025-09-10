@@ -190,13 +190,13 @@ def compute_clusters_floodfill(fg_bg, edges, max_radius=3, min_cluster_size=50, 
 def clean_labels(labels, spatial, min_cluster_size):
   labels_new = np.zeros_like(labels)
   for l in np.unique(labels):
-    l_mask = np.uint8(labels==l)
+    l_mask = np.array(labels==l, dtype=np.uint8)
     _, l_labels = cv2.connectedComponents(np.ascontiguousarray(l_mask, dtype=np.uint8))
     for l_ in np.unique(l_labels):
       if l_ == 0:
         continue
       if not is_valid_cluster(l_labels, l_, min_cluster_size=min_cluster_size):
-        l_mask[l_labels==l_] = 0
+        l_mask = np.where(l_labels==l_, 0, l_mask).astype(np.uint8)
     labels_new[l_mask==1] = l
   return labels_new
 
@@ -536,26 +536,34 @@ def compute_transforms(
     if len(target_to_element[c]) > 0:
       for i in range(len(target_to_element[c])):
         ox, oy = origin[target_to_element[c][i]].detach().cpu().numpy()
-        best_render = cv2.circle(np.ascontiguousarray(best_render, dtype=np.uint8), (int(ox * best_render.shape[1]), int(oy * best_render.shape[0])), 1, (255, 255, 255), 2)
+        render_h, render_w = best_render.shape[:2]
+        best_render = cv2.circle(np.ascontiguousarray(best_render, dtype=np.uint8), (int(ox * render_w), int(oy * render_h)), 1, (255, 255, 255), 2)
     sbs = np.uint8(np.concatenate([best_render, 255 * gt_frame]))
-    sbs = cv2.putText(np.ascontiguousarray(sbs, dtype=np.uint8), 's0', (10, sbs.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
-    sbs = cv2.putText(sbs, f'{loss[c]:.4f}', (sbs.shape[1] - 50, sbs.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
+    sbs_h, sbs_w = sbs.shape[:2]
+    sbs = cv2.putText(np.ascontiguousarray(sbs, dtype=np.uint8), 's0', (10, sbs_h - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
+    sbs = cv2.putText(np.ascontiguousarray(sbs, dtype=np.uint8), f'{loss[c]:.4f}', (sbs_w - 50, sbs_h - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
     comp = np.uint8(np.abs(best_render - 255 * gt_frame))
     comp = np.pad(comp, ((0, 200), (0, 0), (0, 0)))
-    comp = np.concatenate([comp, np.zeros([comp.shape[0], 300, 3], dtype=np.uint8)], axis=1)
-    comp = cv2.putText(comp, 's0', (10, comp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
+    comp_h, comp_w = comp.shape[:2]
+    comp = np.concatenate([comp, np.zeros([comp_h, 300, 3], dtype=np.uint8)], axis=1)
+    comp = cv2.putText(np.ascontiguousarray(comp, dtype=np.uint8), 's0', (10, comp_h - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
     k = 0
     for opt_var_name in opt_var_names:
       i = all_var_names.index(opt_var_name)
       for elem in target_to_element[c]:
-        comp = cv2.putText(comp, f'{opt_var_name}: {best_c_variables[i][elem]:.4f}', (best_render.shape[1] + 10, 10 * (k + 1)), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
+        render_h, render_w = best_render.shape[:2]
+        comp = cv2.putText(np.ascontiguousarray(comp, dtype=np.uint8), f'{opt_var_name}: {best_c_variables[i][elem]:.4f}', (render_w + 10, 10 * (k + 1)), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
         k += 1
-    comp = cv2.putText(comp, f'loss: {loss[c]:.4f}', (best_render.shape[1] + 120, comp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
+    render_h, render_w = best_render.shape[:2]
+    comp_h, comp_w = comp.shape[:2]
+    comp = cv2.putText(np.ascontiguousarray(comp, dtype=np.uint8), f'loss: {loss[c]:.4f}', (render_w + 120, comp_h - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
     for i, (loss_val, loss_name) in enumerate(zip([best_rgb_loss, best_alpha_loss, best_params_loss], ['rgb', 'alpha', 'params'])):
-      comp = cv2.putText(comp, f'{loss_name}: {loss_val[c]:.4f}', (best_render.shape[1] + 120, 10 * (i + 1)), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
+      render_h, render_w = best_render.shape[:2]
+      comp = cv2.putText(np.ascontiguousarray(comp, dtype=np.uint8), f'{loss_name}: {loss_val[c]:.4f}', (render_w + 120, 10 * (i + 1)), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
     for i in range(origin.shape[0]):
       ox, oy = origin[i].detach().cpu().numpy()
-      comp = cv2.putText(comp, f'centroid: ({ox:.2f}, {oy:.2f})', (best_render.shape[1] + 120, 10 * (i + 6)), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
+      render_h, render_w = best_render.shape[:2]
+      comp = cv2.putText(np.ascontiguousarray(comp, dtype=np.uint8), f'centroid: ({ox:.2f}, {oy:.2f})', (render_w + 120, 10 * (i + 6)), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
     on_top[c].append(comp)
     side_by_side[c].append(sbs)
     # cv2.imshow('ss', sbs)
@@ -612,24 +620,31 @@ def compute_transforms(
           best_render = compositing.torch2numpy(best_render.detach().cpu())
           gt_frame = f[:, :, :3] / 255.0
           sbs = np.uint8(255 * np.concatenate([best_render, gt_frame]))
-          sbs = cv2.putText(sbs, f's{total_step + 1}', (10, sbs.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
-          sbs = cv2.putText(sbs, f'{min_loss[c]:.4f}', (sbs.shape[1] - 50, sbs.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
+          sbs_h, sbs_w = sbs.shape[:2]
+          sbs = cv2.putText(np.ascontiguousarray(sbs, dtype=np.uint8), f's{total_step + 1}', (10, sbs_h - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
+          sbs = cv2.putText(np.ascontiguousarray(sbs, dtype=np.uint8), f'{min_loss[c]:.4f}', (sbs_w - 50, sbs_h - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
           comp = np.uint8(255 * np.abs(best_render - gt_frame))
           comp = np.pad(comp, ((0, 200), (0, 0), (0, 0)))
           comp = np.concatenate([comp, np.zeros([comp.shape[0], 300, 3], dtype=np.uint8)], axis=1)
-          comp = cv2.putText(comp, f's{total_step + 1}', (10, comp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
+          comp_h, comp_w = comp.shape[:2]
+          comp = cv2.putText(np.ascontiguousarray(comp, dtype=np.uint8), f's{total_step + 1}', (10, comp_h - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
           k = 0
           for opt_var_name in opt_var_names:
             i = all_var_names.index(opt_var_name)
             for elem in target_to_element[c]:
-              comp = cv2.putText(comp, f'{opt_var_name}: {best_c_variables[i][elem]:.4f}', (best_render.shape[1] + 10, 10 * (k + 1)), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
+              render_h, render_w = best_render.shape[:2]
+              comp = cv2.putText(np.ascontiguousarray(comp, dtype=np.uint8), f'{opt_var_name}: {best_c_variables[i][elem]:.4f}', (render_w + 10, 10 * (k + 1)), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
               k += 1
-          comp = cv2.putText(comp, f'loss: {min_loss[c]:.4f}', (best_render.shape[1] + 120, comp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
+          comp_h, comp_w = comp.shape[:2]
+          render_h, render_w = best_render.shape[:2]
+          comp = cv2.putText(np.ascontiguousarray(comp, dtype=np.uint8), f'loss: {min_loss[c]:.4f}', (render_w + 120, comp_h - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
           for i, (loss_val, loss_name) in enumerate(zip([best_rgb_loss, best_alpha_loss, best_params_loss], ['rgb', 'alpha', 'params'])):
-            comp = cv2.putText(comp, f'{loss_name}: {loss_val[c]:.4f}', (best_render.shape[1] + 120, 10 * (i + 1)), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
+            render_h, render_w = best_render.shape[:2]
+            comp = cv2.putText(np.ascontiguousarray(comp, dtype=np.uint8), f'{loss_name}: {loss_val[c]:.4f}', (render_w + 120, 10 * (i + 1)), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
           for i in range(origin.shape[0]):
             ox, oy = origin[i].detach().cpu().numpy()
-            comp = cv2.putText(comp, f'centroid: ({ox:.2f}, {oy:.2f})', (best_render.shape[1] + 120, 10 * (i + 6)), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
+            render_h, render_w = best_render.shape[:2]
+            comp = cv2.putText(np.ascontiguousarray(comp, dtype=np.uint8), f'centroid: ({ox:.2f}, {oy:.2f})', (render_w + 120, 10 * (i + 6)), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
           side_by_side[c].append(sbs)
           on_top[c].append(comp)
           # cv2.imshow('ot', comp)
@@ -648,24 +663,29 @@ def compute_transforms(
     best_render = compositing.torch2numpy(best_render.detach().cpu())
     gt_frame = f[:, :, :3] / 255.0
     sbs = np.uint8(255 * np.concatenate([best_render, gt_frame], axis=1))
-    sbs = cv2.putText(sbs, f's{total_step + 1}', (10, sbs.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
-    sbs = cv2.putText(sbs, f'{min_loss[c]:.4f}', (sbs.shape[1] - 50, sbs.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
+    sbs_h, sbs_w = sbs.shape[:2]
+    sbs = cv2.putText(np.ascontiguousarray(sbs, dtype=np.uint8), f's{total_step + 1}', (10, sbs_h - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
+    sbs = cv2.putText(np.ascontiguousarray(sbs, dtype=np.uint8), f'{min_loss[c]:.4f}', (sbs_w - 50, sbs_h - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
     comp = np.uint8(255 * np.abs(best_render - gt_frame))
     comp = np.pad(comp, ((0, 200), (0, 0), (0, 0)))
     comp = np.concatenate([comp, np.zeros([comp.shape[0], 300, 3], dtype=np.uint8)], axis=1)
-    comp = cv2.putText(comp, f's{total_step + 1}', (10, comp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
+    comp_h, comp_w = comp.shape[:2]
+    comp = cv2.putText(np.ascontiguousarray(comp, dtype=np.uint8), f's{total_step + 1}', (10, comp_h - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
     k = 0
     for opt_var_name in opt_var_names:
       i = all_var_names.index(opt_var_name)
       for elem in target_to_element[c]:
-        comp = cv2.putText(comp, f'{opt_var_name}: {best_c_variables[i][elem]:.4f}', (best_render.shape[1] + 10, 10 * (k + 1)), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
+        render_h, render_w = best_render.shape[:2]
+        comp = cv2.putText(np.ascontiguousarray(comp, dtype=np.uint8), f'{opt_var_name}: {best_c_variables[i][elem]:.4f}', (render_w + 10, 10 * (k + 1)), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
         k += 1
     comp = cv2.putText(comp, f'loss: {min_loss[c]:.4f}', (best_render.shape[1] + 120, comp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
     for i, (loss_val, loss_name) in enumerate(zip([best_rgb_loss, best_alpha_loss, best_params_loss], ['rgb', 'alpha', 'params'])):
-      comp = cv2.putText(comp, f'{loss_name}: {loss_val[c]:.4f}', (best_render.shape[1] + 120, 10 * (i + 1)), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
+      render_h, render_w = best_render.shape[:2]
+      comp = cv2.putText(np.ascontiguousarray(comp, dtype=np.uint8), f'{loss_name}: {loss_val[c]:.4f}', (render_w + 120, 10 * (i + 1)), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
     for i in range(origin.shape[0]):
       ox, oy = origin[i].detach().cpu().numpy()
-      comp = cv2.putText(comp, f'centroid: ({ox:.2f}, {oy:.2f})', (best_render.shape[1] + 120, 10 * (i + 6)), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
+      render_h, render_w = best_render.shape[:2]
+      comp = cv2.putText(np.ascontiguousarray(comp, dtype=np.uint8), f'centroid: ({ox:.2f}, {oy:.2f})', (render_w + 120, 10 * (i + 6)), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
     on_top[c].append(comp)
     side_by_side[c].append(sbs)
     # cv2.imshow('ot', comp)
@@ -676,6 +696,7 @@ def compute_transforms(
 
   t0 = time.perf_counter()
   render_list = []
+  alpha = np.array([])  # Initialize to avoid unbound variable error
   for e in range(len(elements_square_fullres)):
     target_idx = ((t2e_onehot[:, e]>0).nonzero(as_tuple=True)[0])
     element_fullres = elements_square_fullres[e][None, ...]
@@ -714,7 +735,7 @@ def propagate_labels(frame, fg_bg_clusters, fg_bg, debug=False):
   # Get unlabeled regions and mask out components which should be marked as new shapes.
   fg_bg_binary = np.uint8(fg_bg>0)
   unlabeled = fg_bg_binary.copy()
-  unlabeled[fg_bg_clusters>0] = 0
+  unlabeled = np.where(fg_bg_clusters>0, 0, unlabeled).astype(np.uint8)
   labeled = fg_bg_clusters.copy()
   labeled[labeled>0] = 1
   expanded_labels = fg_bg_clusters * fg_bg_binary
@@ -732,7 +753,7 @@ def propagate_labels(frame, fg_bg_clusters, fg_bg, debug=False):
       k_mask[unlabeled_comps==k] = 1
       comp_masks.append(k_mask)
     comp_masks = np.stack(comp_masks)
-    overlap = np.uint8(fg_bg_clusters==l)[None, ...] * comp_masks
+    overlap = np.array(fg_bg_clusters==l, dtype=np.uint8)[None, ...] * comp_masks
     l_candidates = np.zeros_like(fg_bg_clusters, dtype=np.uint8)
     for r in range(overlap.shape[0]):
       if np.any(overlap[r]):
@@ -743,6 +764,7 @@ def propagate_labels(frame, fg_bg_clusters, fg_bg, debug=False):
   candidates = np.stack(candidates, axis=-1)
   unlabeled_indices = np.stack(np.where(unlabeled==1)).T
 
+  best_c = np.array([])  # Initialize to avoid unbound variable error
   if unlabeled_indices.shape[0] >= 1:
     # Compute LAB mean of each cluster.
     c_dists = []
@@ -802,10 +824,17 @@ def pad_to_square(img, dim=None, color=None):
 def get_moment_features(img, radius=None, degree=8):
   gray = cv2.cvtColor(img[:, :, :3], cv2.COLOR_BGR2GRAY)
   shape_mask = np.uint8(img[:, :, 3]>0)
-  min_x = max(int(np.min(np.where(shape_mask==1)[1])) - 10, 0)
-  max_x = min(int(np.max(np.where(shape_mask==1)[1])) + 10, shape_mask.shape[1])
-  min_y = max(int(np.min(np.where(shape_mask==1)[0])) - 10, 0)
-  max_y = min(int(np.max(np.where(shape_mask==1)[0])) + 10, shape_mask.shape[0])
+  mask_indices = np.where(shape_mask==1)
+  if len(mask_indices) > 0 and len(mask_indices[0]) > 0:  # Check if mask has valid coordinates
+    y_coords, x_coords = mask_indices[0], mask_indices[1]
+    min_x = max(int(np.min(x_coords)) - 10, 0)
+    max_x = min(int(np.max(x_coords)) + 10, shape_mask.shape[1])
+    min_y = max(int(np.min(y_coords)) - 10, 0)
+    max_y = min(int(np.max(y_coords)) + 10, shape_mask.shape[0])
+  else:
+    # Fallback for empty mask
+    min_x, min_y = 0, 0
+    max_x, max_y = shape_mask.shape[1], shape_mask.shape[0]
   if radius is None:
     radius = np.sqrt((max_x - min_x)**2 + (max_y - min_y)**2) // 2
   pad = int(radius * (np.sqrt(2) - 1))
@@ -816,7 +845,11 @@ def get_moment_features(img, radius=None, degree=8):
   contours, _ = cv2.findContours(shape, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
   contours = np.concatenate(contours, axis=0)
   coeff = elliptic_fourier_descriptors(np.squeeze(contours), order=10, normalize=True)
-  coeff = coeff[3:] / np.linalg.norm(coeff[3:])
+  coeff_norm = np.linalg.norm(coeff[3:])
+  if coeff_norm > 0:
+    coeff = coeff[3:] / coeff_norm
+  else:
+    coeff = coeff[3:]
   return coeff
 
 
@@ -847,6 +880,7 @@ def init_rot_scale(prev_crop, curr_crop, prev_angle, bg_crop, over_mask=None, p_
   best_crop_rot = prev_crop.copy()
   min_rot_diff = np.inf
   best_rgb_diff = np.inf
+  rot_vis = np.zeros_like(curr_crop)  # Initialize to avoid unbound variable error
   best_angle_diff = np.inf
   best_rot = 0.0
   best_fallback_rot = 0.0
@@ -889,10 +923,11 @@ def init_rot_scale(prev_crop, curr_crop, prev_angle, bg_crop, over_mask=None, p_
       rot_vis = np.concatenate([curr_crop_rgb, loss_mask[..., None] * np.abs(curr_crop_rgb - best_crop_rot), loss_mask[..., None] * np.abs(curr_crop_rgb - prev_crop_rot)], axis=1)
       rot_vis = np.uint8(255 * rot_vis)
       display_best_rot = best_fallback_rot if best_rot is None else best_rot
+      vis_h, vis_w = rot_vis.shape[:2]
       rot_vis = cv2.putText(
-        rot_vis, f'{display_best_rot:.2f} deg: {min_rot_diff:.2f} ({best_rgb_diff:.2f} {best_angle_diff:.2f})', (10, rot_vis.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
+        np.ascontiguousarray(rot_vis, dtype=np.uint8), f'{display_best_rot:.2f} deg: {min_rot_diff:.2f} ({best_rgb_diff:.2f} {best_angle_diff:.2f})', (10, vis_h - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
       rot_vis = cv2.putText(
-        rot_vis, f'{angle:.2f} deg', (rot_vis.shape[1] - 50, rot_vis.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
+        np.ascontiguousarray(rot_vis, dtype=np.uint8), f'{angle:.2f} deg', (vis_w - 50, vis_h - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
       if debug:
         cv2.imshow('rot_vis', rot_vis)
         cv2.waitKey(0)

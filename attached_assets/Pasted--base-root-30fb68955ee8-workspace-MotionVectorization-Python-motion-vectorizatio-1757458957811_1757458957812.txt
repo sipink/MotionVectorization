@@ -1,0 +1,36 @@
+(base) root@30fb68955ee8:/workspace/MotionVectorization# # استخدم Python من بيئة motion_vectorization مباشرة
+/opt/miniconda3/envs/motion_vectorization/bin/python3 -m motion_vectorization.create_motion_file --video_name test1 --config motion_vectorization/config/default.json
+
+# ثم إنشاء SVG
+/opt/miniconda3/envs/motion_vectorization/bin/python3 -m svg_utils.create_svg_dense test1 30
+Traceback (most recent call last):
+  File "/opt/miniconda3/envs/motion_vectorization/lib/python3.8/runpy.py", line 194, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/opt/miniconda3/envs/motion_vectorization/lib/python3.8/runpy.py", line 87, in _run_code
+    exec(code, run_globals)
+  File "/workspace/MotionVectorization/motion_vectorization/create_motion_file.py", line 12, in <module>
+    from .utils import get_numbers
+  File "/workspace/MotionVectorization/motion_vectorization/utils.py", line 9, in <module>
+    from kornia.filters import gaussian_blur2d
+  File "/opt/miniconda3/envs/motion_vectorization/lib/python3.8/site-packages/kornia/__init__.py", line 3, in <module>
+    from . import filters
+  File "/opt/miniconda3/envs/motion_vectorization/lib/python3.8/site-packages/kornia/filters/__init__.py", line 3, in <module>
+    from .bilateral import BilateralBlur, JointBilateralBlur, bilateral_blur, joint_bilateral_blur
+  File "/opt/miniconda3/envs/motion_vectorization/lib/python3.8/site-packages/kornia/filters/bilateral.py", line 3, in <module>
+    from kornia.core import Module, Tensor, pad
+  File "/opt/miniconda3/envs/motion_vectorization/lib/python3.8/site-packages/kornia/core/__init__.py", line 1, in <module>
+    from ._backend import (
+  File "/opt/miniconda3/envs/motion_vectorization/lib/python3.8/site-packages/kornia/core/_backend.py", line 4, in <module>
+    import torch.nn.functional as F
+ModuleNotFoundError: No module named 'torch.nn.functional'
+Traceback (most recent call last):
+  File "/opt/miniconda3/envs/motion_vectorization/lib/python3.8/runpy.py", line 194, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/opt/miniconda3/envs/motion_vectorization/lib/python3.8/runpy.py", line 87, in _run_code
+    exec(code, run_globals)
+  File "/workspace/MotionVectorization/svg_utils/create_svg_dense.py", line 14, in <module>
+    from .utils import *
+  File "/workspace/MotionVectorization/svg_utils/utils.py", line 1, in <module>
+    import librosa
+ModuleNotFoundError: No module named 'librosa'
+(base) root@30fb68955ee8:/workspace/MotionVectorization# 

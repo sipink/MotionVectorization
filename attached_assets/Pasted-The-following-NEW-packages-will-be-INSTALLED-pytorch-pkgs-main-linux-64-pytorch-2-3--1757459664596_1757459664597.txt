@@ -1,0 +1,103 @@
+The following NEW packages will be INSTALLED:
+
+  pytorch            pkgs/main/linux-64::pytorch-2.3.0-gpu_cuda118py38h796af20_101 
+  torchtriton        pytorch/linux-64::torchtriton-2.3.1-py38 
+
+
+Proceed ([y]/n)? y
+
+
+Downloading and Extracting Packages:
+                                                                                                                                                                                                                              
+                                                                                                                                                                                                                              
+InvalidArchiveError('Error with archive /opt/miniconda3/pkgs/torchtriton-2.3.1-py38.tar.bz2.  You probably need to delete and re-download or re-create this file.  Message was:\n\nfailed with error: [Errno 28] No space left on device')
+InvalidArchiveError('Error with archive /opt/miniconda3/pkgs/pytorch-2.3.0-gpu_cuda118py38h796af20_101.conda.  You probably need to delete and re-download or re-create this file.  Message was:\n\nfailed with error: [Errno 28] No space left on device')
+
+Traceback (most recent call last):
+  File "<string>", line 2, in <module>
+ModuleNotFoundError: No module named 'torch'
+(motion_vectorization) root@30fb68955ee8:/workspace/MotionVectorization# # تشغيل المعالجة الكاملة
+./scripts/script.sh videos/hassan.txt
+
+# بعد الانتهاء، إنشاء SVG
+./scripts/convert_to_svg.sh hassan 30
+videos/hassan.txt
+PREPROCESS
+hassan
+RAFT
+hassan
+Traceback (most recent call last):
+  File "RAFT/extract_flow.py", line 9, in <module>
+    import torch
+ModuleNotFoundError: No module named 'torch'
+videos/hassan.txt
+CLUSTER
+hassan
+Traceback (most recent call last):
+  File "/opt/miniconda3/envs/motion_vectorization/lib/python3.8/runpy.py", line 194, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/opt/miniconda3/envs/motion_vectorization/lib/python3.8/runpy.py", line 87, in _run_code
+    exec(code, run_globals)
+  File "/workspace/MotionVectorization/motion_vectorization/extract_clusters.py", line 9, in <module>
+    import torch
+ModuleNotFoundError: No module named 'torch'
+TRACK
+Logging to motion_vectorization/logs/hassan_track_24180.out
+Traceback (most recent call last):
+  File "/opt/miniconda3/envs/motion_vectorization/lib/python3.8/runpy.py", line 194, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/opt/miniconda3/envs/motion_vectorization/lib/python3.8/runpy.py", line 87, in _run_code
+    exec(code, run_globals)
+  File "/workspace/MotionVectorization/motion_vectorization/extract_shapes.py", line 4, in <module>
+    import torch
+ModuleNotFoundError: No module named 'torch'
+OPTIM
+Logging to motion_vectorization/logs/hassan_optim_29435.out
+Traceback (most recent call last):
+  File "/opt/miniconda3/envs/motion_vectorization/lib/python3.8/runpy.py", line 194, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/opt/miniconda3/envs/motion_vectorization/lib/python3.8/runpy.py", line 87, in _run_code
+    exec(code, run_globals)
+  File "/workspace/MotionVectorization/motion_vectorization/optimize_shapes.py", line 11, in <module>
+    import torch
+ModuleNotFoundError: No module named 'torch'
+PROGRAM
+Traceback (most recent call last):
+  File "/opt/miniconda3/envs/motion_vectorization/lib/python3.8/runpy.py", line 194, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/opt/miniconda3/envs/motion_vectorization/lib/python3.8/runpy.py", line 87, in _run_code
+    exec(code, run_globals)
+  File "/workspace/MotionVectorization/motion_vectorization/create_motion_file.py", line 12, in <module>
+    from .utils import get_numbers
+  File "/workspace/MotionVectorization/motion_vectorization/utils.py", line 8, in <module>
+    import torch
+ModuleNotFoundError: No module named 'torch'
+Traceback (most recent call last):
+  File "/opt/miniconda3/envs/motion_vectorization/lib/python3.8/runpy.py", line 194, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/opt/miniconda3/envs/motion_vectorization/lib/python3.8/runpy.py", line 87, in _run_code
+    exec(code, run_globals)
+  File "/workspace/MotionVectorization/motion_vectorization/create_motion_file.py", line 12, in <module>
+    from .utils import get_numbers
+  File "/workspace/MotionVectorization/motion_vectorization/utils.py", line 8, in <module>
+    import torch
+ModuleNotFoundError: No module named 'torch'
+Traceback (most recent call last):
+  File "/opt/miniconda3/envs/motion_vectorization/lib/python3.8/runpy.py", line 194, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/opt/miniconda3/envs/motion_vectorization/lib/python3.8/runpy.py", line 87, in _run_code
+    exec(code, run_globals)
+  File "/workspace/MotionVectorization/motion_vectorization/full_motion_file.py", line 9, in <module>
+    motion_file = json.load(open(motion_file_path, 'rb'))
+FileNotFoundError: [Errno 2] No such file or directory: 'motion_vectorization/outputs/hassan_None/motion_file.json'
+Traceback (most recent call last):
+  File "/opt/miniconda3/envs/motion_vectorization/lib/python3.8/runpy.py", line 194, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/opt/miniconda3/envs/motion_vectorization/lib/python3.8/runpy.py", line 87, in _run_code
+    exec(code, run_globals)
+  File "/workspace/MotionVectorization/svg_utils/create_svg_dense.py", line 357, in <module>
+    main()
+  File "/workspace/MotionVectorization/svg_utils/create_svg_dense.py", line 339, in main
+    motion_file = json.load(open(os.path.join(arg.video_dir, 'motion_file.json'), 'rb'))
+FileNotFoundError: [Errno 2] No such file or directory: 'motion_vectorization/outputs/hassan_None/motion_file.json'
+(motion_vectorization) root@30fb68955ee8:/workspace/MotionVectorization# 

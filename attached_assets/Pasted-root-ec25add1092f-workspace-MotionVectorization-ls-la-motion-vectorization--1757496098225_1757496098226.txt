@@ -1,0 +1,132 @@
+root@ec25add1092f:/workspace/MotionVectorization# # فحص النتائج الحالية
+ls -la motion_vectorization/outputs/demo_None/
+
+# تشغيل OPTIM (التحسين مع GPU)
+echo "🚀 Running OPTIM stage..."
+python3 -m motion_vectorization.optimize_shapes \
+    --video_file demo.mp4 \
+    --config motion_vectorization/config/demo.json
+
+# تشغيل PROGRAM (إنشاء motion file)
+echo "🎨 Running PROGRAM stage..."
+python3 -m motion_vectorization.create_motion_file \
+    --video_file demo.mp4 \
+    --config motion_vectorization/config/demo.json
+
+# فحص النتائج النهائية
+ls -la motion_vectorization/outputs/demo_None/
+
+# إنشاء SVG النهائي
+echo "🎬 Creating final SVG..."
+./scripts/convert_to_svg.sh demo 30
+
+# فحص الملف النهائي
+ls -la motion_vectorization/outputs/demo_None/motion_file.svg
+total 107932
+drwxr-xr-x  5 root root        89 Sep 10 09:17 .
+drwxr-xr-x  3 root root        31 Sep 10 09:09 ..
+drwxr-xr-x 14 root root      4096 Sep 10 09:14 debug
+drwxr-xr-x  3 root root        27 Sep 10 09:09 outputs
+drwxr-xr-x  2 root root      4096 Sep 10 09:19 shapes
+-rw-r--r--  1 root root 110509269 Sep 10 09:19 time_bank.pkl
+🚀 Running OPTIM stage...
+2025-09-10 09:21:13.172769
+Configs:
+  video_file:   demo.mp4
+  video_dir:    videos
+  output_dir:   outputs
+  suffix:       None
+  config:       motion_vectorization/config/demo.json
+  date: None
+  frame_rate:   24
+  subsample_rate:       1
+  max_frames:   100
+  start_frame:  0
+  scale:        0.3
+  bg_thresh:    0.1
+  min_cluster_size:     30
+  median_radius:        5
+  cluster_eps:  5
+  cluster_min_samples:  10
+  bg_file:      None
+  init_weight:  0.0
+  init_thresh:  0.01
+  num_match_shapes:     5
+  match_radius: 120.0
+  main_match_thresh:    0.5
+  fallback_match_thresh:        0.5
+  match_method: hu
+  min_opt_size: 32
+  blur_kernel:  1
+  lr:   0.01
+  p_weight:     0.1
+  use_z:        True
+  n_steps:      50
+  use_gpu:      True
+  bleed:        50
+  all_joint:    False
+  overlap_thresh:       0.9
+  manual_init:  False
+  use_k:        False
+  use_r:        False
+  use_s:        False
+  use_t:        False
+  init_r:       False
+  init_s:       False
+  init_t:       False
+  drop_thresh:  0.005
+  snap_thresh:  3
+  scale_thresh: 0.03
+  angle_thresh: 5.0
+  debug:        False
+  verbose:      False
+  show: False
+  show_optim:   False
+  show_recon:   False
+  checkpoint:   False
+device: cuda
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/workspace/MotionVectorization/motion_vectorization/optimize_shapes.py", line 757, in <module>
+    main()
+  File "/workspace/MotionVectorization/motion_vectorization/optimize_shapes.py", line 265, in main
+    time_bank = pickle.load(open(os.path.join(video_folder, 'time_bank.pkl'), 'rb'))
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'outputs/demo_None/time_bank.pkl'
+🎨 Running PROGRAM stage...
+usage: create_motion_file.py [-h] --video_name VIDEO_NAME [--video_dir VIDEO_DIR] [--output_dir OUTPUT_DIR] [--suffix SUFFIX] [--bg_file BG_FILE] [--skip_figs] [--config CONFIG]
+create_motion_file.py: error: the following arguments are required: --video_name
+total 107932
+drwxr-xr-x  5 root root        89 Sep 10 09:17 .
+drwxr-xr-x  3 root root        31 Sep 10 09:09 ..
+drwxr-xr-x 14 root root      4096 Sep 10 09:14 debug
+drwxr-xr-x  3 root root        27 Sep 10 09:09 outputs
+drwxr-xr-x  2 root root      4096 Sep 10 09:19 shapes
+-rw-r--r--  1 root root 110509269 Sep 10 09:19 time_bank.pkl
+🎬 Creating final SVG...
+shapes_folder: outputs/demo_None/shapes
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/workspace/MotionVectorization/motion_vectorization/create_motion_file.py", line 187, in <module>
+    main()
+  File "/workspace/MotionVectorization/motion_vectorization/create_motion_file.py", line 61, in main
+    for filename in os.listdir(shapes_folder):
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'outputs/demo_None/shapes'
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/workspace/MotionVectorization/motion_vectorization/full_motion_file.py", line 9, in <module>
+    motion_file = json.load(open(motion_file_path, 'rb'))
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'motion_vectorization/outputs/demo_None/motion_file.json'
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/workspace/MotionVectorization/svg_utils/create_svg_dense.py", line 3, in <module>
+    import drawSvg as draw
+ModuleNotFoundError: No module named 'drawSvg'
+ls: cannot access 'motion_vectorization/outputs/demo_None/motion_file.svg': No such file or directory
+root@ec25add1092f:/workspace/MotionVectorization# 

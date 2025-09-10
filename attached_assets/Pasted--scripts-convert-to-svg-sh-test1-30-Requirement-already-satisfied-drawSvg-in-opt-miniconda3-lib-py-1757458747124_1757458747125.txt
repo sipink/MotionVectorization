@@ -1,0 +1,52 @@
+/scripts/convert_to_svg.sh test1 30
+Requirement already satisfied: drawSvg in /opt/miniconda3/lib/python3.13/site-packages (2.4.0)
+Collecting easing-functions
+  Using cached easing_functions-1.0.4-py3-none-any.whl.metadata (1.6 kB)
+Using cached easing_functions-1.0.4-py3-none-any.whl (15 kB)
+Installing collected packages: easing-functions
+Successfully installed easing-functions-1.0.4
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+bash: !': event not found
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/workspace/MotionVectorization/motion_vectorization/create_motion_file.py", line 5, in <module>
+    import cv2
+ModuleNotFoundError: No module named 'cv2'
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/workspace/MotionVectorization/svg_utils/create_svg_dense.py", line 3, in <module>
+    import drawSvg as draw
+ModuleNotFoundError: No module named 'drawSvg'
+(base) root@30fb68955ee8:/workspace/MotionVectorization# # في نفس البيئة
+pip install opencv-python
+pip install drawSvg==2.4.0
+
+# إعادة المحاولة
+./scripts/convert_to_svg.sh test1 30
+Collecting opencv-python
+  Using cached opencv_python-4.12.0.88-cp37-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (19 kB)
+Collecting numpy<2.3.0,>=2 (from opencv-python)
+  Downloading numpy-2.2.6-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (62 kB)
+Using cached opencv_python-4.12.0.88-cp37-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (67.0 MB)
+Downloading numpy-2.2.6-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (16.5 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 16.5/16.5 MB 39.8 MB/s eta 0:00:00
+Installing collected packages: numpy, opencv-python
+Successfully installed numpy-2.2.6 opencv-python-4.12.0.88
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+Requirement already satisfied: drawSvg==2.4.0 in /opt/miniconda3/lib/python3.13/site-packages (2.4.0)
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/workspace/MotionVectorization/motion_vectorization/create_motion_file.py", line 7, in <module>
+    import matplotlib.pyplot as plt
+ModuleNotFoundError: No module named 'matplotlib'
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/workspace/MotionVectorization/svg_utils/create_svg_dense.py", line 3, in <module>
+    import drawSvg as draw
+ModuleNotFoundError: No module named 'drawSvg'
+(base) root@30fb68955ee8:/workspace/MotionVectorization# 

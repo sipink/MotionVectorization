@@ -1,0 +1,48 @@
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/workspace/MotionVectorization/motion_vectorization/optimize_shapes.py", line 757, in <module>
+    main()
+    ~~~~^^
+  File "/workspace/MotionVectorization/motion_vectorization/optimize_shapes.py", line 265, in main
+    time_bank = pickle.load(open(os.path.join(video_folder, 'time_bank.pkl'), 'rb'))
+                            ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'motion_vectorization/outputs/hassan_None/time_bank.pkl'
+PROGRAM
+shapes_folder: motion_vectorization/outputs/hassan_None/shapes
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/workspace/MotionVectorization/motion_vectorization/create_motion_file.py", line 187, in <module>
+    main()
+    ~~~~^^
+  File "/workspace/MotionVectorization/motion_vectorization/create_motion_file.py", line 61, in main
+    for filename in os.listdir(shapes_folder):
+                    ~~~~~~~~~~^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'motion_vectorization/outputs/hassan_None/shapes'
+(base) root@30fb68955ee8:/workspace/MotionVectorization# ./scripts/convert_to_svg.sh hassan 30
+shapes_folder: motion_vectorization/outputs/hassan_None/shapes
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/workspace/MotionVectorization/motion_vectorization/create_motion_file.py", line 187, in <module>
+    main()
+    ~~~~^^
+  File "/workspace/MotionVectorization/motion_vectorization/create_motion_file.py", line 61, in main
+    for filename in os.listdir(shapes_folder):
+                    ~~~~~~~~~~^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'motion_vectorization/outputs/hassan_None/shapes'
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/workspace/MotionVectorization/motion_vectorization/full_motion_file.py", line 9, in <module>
+    motion_file = json.load(open(motion_file_path, 'rb'))
+                            ~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'motion_vectorization/outputs/hassan_None/motion_file.json'
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/workspace/MotionVectorization/svg_utils/create_svg_dense.py", line 3, in <module>
+    import drawSvg as draw
+ModuleNotFoundError: No module named 'drawSvg'
+(base) root@30fb68955ee8:/workspace/MotionVectorization# 

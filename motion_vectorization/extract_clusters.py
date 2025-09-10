@@ -13,6 +13,7 @@ from scipy import signal
 
 from .utils import *
 from .visualizer import Visualizer
+from .sam2_engine import create_sam2_engine, sam2_segment_frame, convert_to_clusters
 
 torch.manual_seed(0)
 np.random.seed(0)
@@ -69,6 +70,15 @@ parser.add_argument(
 parser.add_argument(
   '--config', type=str, default=None, 
   help='Config file.')
+parser.add_argument(
+  '--use_sam2', action='store_true', default=True,
+  help='Use SAM2.1 for segmentation instead of Canny edge detection.')
+parser.add_argument(
+  '--sam2_device', type=str, default='auto',
+  help='Device for SAM2.1 (cuda/cpu/auto).')
+parser.add_argument(
+  '--sam2_batch_size', type=int, default=4,
+  help='Batch size for SAM2.1 processing.')
 arg = parser.parse_args()
 
 arg = parser.parse_args()
@@ -88,6 +98,15 @@ for arg_name, arg_val in vars(arg).items():
   print(f'  {arg_name}:\t{arg_val}')
 
 def main():
+  # Initialize SAM2.1 segmentation engine if enabled
+  sam2_engine = None
+  if arg.use_sam2:
+    print("🚀 Initializing SAM2.1 Segmentation Engine...")
+    sam2_engine = create_sam2_engine(device=arg.sam2_device)
+    print(f"✅ SAM2.1 Engine ready: {sam2_engine.config.device}")
+  else:
+    print("⚠️ Using legacy Canny edge detection (consider --use_sam2 for better accuracy)")
+    
   # Read folders.
   frame_folder = os.path.join(arg.video_dir, video_name, 'rgb')
   frame_idxs = get_numbers(frame_folder)
@@ -143,27 +162,68 @@ def main():
     else:
       lab_mode, _ = np.array(stats.mode(np.reshape(frame_blurred_lab, (-1, 3)), axis=0))
       fg_bg = np.where(np.linalg.norm(frame_lab / 255.0 - lab_mode / 255.0, axis=-1) > arg.bg_thresh, fg_bg, 0)
-    edges_l = np.uint8(canny(l, low_threshold=arg.lo_thresh, high_threshold=arg.hi_thresh))
-    edges_a = np.uint8(canny(a, low_threshold=arg.lo_thresh, high_threshold=arg.hi_thresh))
-    edges_b = np.uint8(canny(b, low_threshold=arg.lo_thresh, high_threshold=arg.hi_thresh))
-    edges = np.max(np.stack([edges_l, edges_a, edges_b]), axis=0)
-    # Link broken edges.
-    if arg.link:
-      for kernel in [
-        np.array([[0, 0, 0], [1, 0, 1], [0, 0, 0]], dtype=np.uint8), 
-        np.array([[0, 1, 0], [0, 0, 0], [0, 1, 0]], dtype=np.uint8), 
-        np.array([[1, 0, 0], [0, 0, 0], [0, 0, 1]], dtype=np.uint8), 
-        np.array([[0, 0, 1], [0, 0, 0], [1, 0, 0]], dtype=np.uint8)
-      ]:
-        links = signal.convolve2d(edges, kernel, mode='same')
-        links = np.uint8(links==2)
-        edges = np.maximum(edges, links)
+    # === SAM2.1 SEGMENTATION PIPELINE ===
+    if sam2_engine is not None:
+      # Use SAM2.1 for superior segmentation
+      print(f"🎯 Processing frame {frame_idx} with SAM2.1...")
+      sam2_mask, sam2_metadata = sam2_segment_frame(sam2_engine, frame, frame_idx)
+      
+      # Create edges from SAM2.1 mask for compatibility
+      edges = cv2.Canny(sam2_mask, 50, 150)
+      
+      # Enhanced edge refinement (better than basic linking)
+      if arg.link:
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+        edges = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel)
+      
+      print(f"  📊 SAM2.1 quality: {sam2_metadata.get('quality_scores', [0])[0]:.3f}")
+      print(f"  ⚡ Method: {sam2_metadata.get('method', 'unknown')}")
+    else:
+      # === LEGACY CANNY EDGE DETECTION ===
+      edges_l = np.uint8(canny(l, low_threshold=arg.lo_thresh, high_threshold=arg.hi_thresh))
+      edges_a = np.uint8(canny(a, low_threshold=arg.lo_thresh, high_threshold=arg.hi_thresh))
+      edges_b = np.uint8(canny(b, low_threshold=arg.lo_thresh, high_threshold=arg.hi_thresh))
+      edges = np.max(np.stack([edges_l, edges_a, edges_b]), axis=0)
+      # Link broken edges.
+      if arg.link:
+        for kernel in [
+          np.array([[0, 0, 0], [1, 0, 1], [0, 0, 0]], dtype=np.uint8), 
+          np.array([[0, 1, 0], [0, 0, 0], [0, 1, 0]], dtype=np.uint8), 
+          np.array([[1, 0, 0], [0, 0, 0], [0, 0, 1]], dtype=np.uint8), 
+          np.array([[0, 0, 1], [0, 0, 0], [1, 0, 0]], dtype=np.uint8)
+        ]:
+          links = signal.convolve2d(edges, kernel, mode='same')
+          links = np.uint8(links==2)
+          edges = np.maximum(edges, links)
+    
     cv2.imwrite(os.path.join(edges_folder, f'{frame_idx:03d}.png'), 255 * edges)
 
-    # BEGIN CANNY EDGE CLUSTERING
-    fg_labels, fg_labels_vis = compute_clusters_floodfill(fg_bg, edges, max_radius=arg.max_radius, min_cluster_size=arg.min_cluster_size, min_density=arg.min_density, min_dim=arg.min_dim)
-    fg_bg[fg_labels<0] = 0
-    # END CANNY EDGE CLUSTERING
+    # === CLUSTERING PIPELINE ===
+    if sam2_engine is not None:
+      # Use SAM2.1 mask for superior clustering
+      print(f"🔬 Converting SAM2.1 mask to clusters...")
+      fg_labels, fg_labels_vis = convert_to_clusters(
+        sam2_mask, 
+        min_cluster_size=arg.min_cluster_size, 
+        min_density=arg.min_density
+      )
+      
+      # Update foreground mask based on SAM2.1 results
+      fg_bg = (sam2_mask > 127).astype(np.uint8)
+      fg_bg[fg_labels < 0] = 0
+      
+      print(f"  📈 SAM2.1 clusters: {len(np.unique(fg_labels[fg_labels >= 0]))}")
+    else:
+      # === LEGACY FLOOD FILL CLUSTERING ===
+      fg_labels, fg_labels_vis = compute_clusters_floodfill(
+        fg_bg, edges, 
+        max_radius=arg.max_radius, 
+        min_cluster_size=arg.min_cluster_size, 
+        min_density=arg.min_density, 
+        min_dim=arg.min_dim
+      )
+      fg_bg[fg_labels<0] = 0
+      print(f"  📈 Legacy clusters: {len(np.unique(fg_labels[fg_labels >= 0]))}")
     _, fg_comps = cv2.connectedComponents(fg_bg)
     # BEGIN CONNECTED COMPS CLUSTERING
     # for comp_idx in np.unique(fg_comps)[1:]:
@@ -184,6 +244,31 @@ def main():
     np.save(os.path.join(comps_folder, f'{frame_idx:03d}.npy'), fg_comps)
     np.save(os.path.join(fgbg_folder, f'{frame_idx:03d}.npy'), fg_bg)
     cv2.imwrite(os.path.join(clusters_folder, f'{frame_idx:03d}.png'), fg_labels_vis)
+  
+  # Cleanup and performance report
+  if sam2_engine is not None:
+    print("\n🔥 SAM2.1 PERFORMANCE REPORT:")
+    stats = sam2_engine.get_performance_stats()
+    print(f"📊 Total frames: {stats['total_frames_processed']}")
+    print(f"⚡ Average FPS: {stats['average_fps']:.2f}")
+    print(f"🎯 Target FPS: {sam2_engine.config.target_fps} (Goal: 44 FPS)")
+    if stats['average_fps'] >= 44:
+      print("✅ FPS target achieved!")
+    else:
+      print(f"⚠️ FPS below target ({stats['average_fps']:.1f} < 44)")
+    
+    sam2_engine.cleanup()
+    print("🧹 SAM2.1 engine cleaned up successfully")
+  else:
+    print("\n📈 Legacy processing completed")
 
 if __name__ == '__main__':
-  main()
+  print("🎬 Motion Vectorization with SAM2.1 Integration")
+  print("===============================================")
+  try:
+    main()
+    print("\n✅ Processing completed successfully!")
+  except Exception as e:
+    print(f"\n❌ Error during processing: {e}")
+    import traceback
+    traceback.print_exc()

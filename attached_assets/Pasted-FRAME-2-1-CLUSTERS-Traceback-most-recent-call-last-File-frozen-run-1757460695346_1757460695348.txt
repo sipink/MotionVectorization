@@ -1,0 +1,122 @@
+FRAME 2 (1) CLUSTERS
+========================
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/workspace/MotionVectorization/motion_vectorization/extract_shapes.py", line 1529, in <module>
+    main()
+    ~~~~^^
+  File "/workspace/MotionVectorization/motion_vectorization/extract_shapes.py", line 256, in main
+    curr_frame, curr_fg_labels, fg_bg, curr_fg_comps, forw_flow, back_flow = dataloader.load_data(t)
+                                                                             ~~~~~~~~~~~~~~~~~~~~^^^
+  File "/workspace/MotionVectorization/motion_vectorization/dataloader.py", line 32, in load_data
+    labels = np.load(os.path.join(self.labels_folder, f'{self.frame_idxs[i]:03d}.npy'))
+  File "/opt/miniconda3/lib/python3.13/site-packages/numpy/lib/_npyio_impl.py", line 451, in load
+    fid = stack.enter_context(open(os.fspath(file), "rb"))
+                              ~~~~^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'videos/hassan/labels/002.npy'
+OPTIM
+Logging to motion_vectorization/logs/hassan_optim_7426.out
+2025-09-09 23:30:36.269295
+Configs:
+  video_file:   hassan.mp4
+  video_dir:    videos
+  output_dir:   motion_vectorization/outputs
+  suffix:       None
+  config:       motion_vectorization/config/hassan.json
+  date: None
+  frame_rate:   24
+  subsample_rate:       1
+  max_frames:   -1
+  start_frame:  1
+  scale:        0.3
+  bg_thresh:    0.1
+  min_cluster_size:     50
+  median_radius:        5
+  cluster_eps:  5
+  cluster_min_samples:  10
+  bg_file:      None
+  init_weight:  0.0
+  init_thresh:  0.01
+  num_match_shapes:     5
+  match_radius: 120.0
+  main_match_thresh:    0.5
+  fallback_match_thresh:        0.5
+  match_method: hu
+  min_opt_size: 128
+  blur_kernel:  3
+  lr:   0.05
+  p_weight:     0.05
+  use_z:        True
+  n_steps:      10
+  use_gpu:      True
+  bleed:        50
+  all_joint:    False
+  overlap_thresh:       0.9
+  manual_init:  False
+  use_k:        False
+  use_r:        False
+  use_s:        False
+  use_t:        False
+  init_r:       False
+  init_s:       False
+  init_t:       False
+  drop_thresh:  0.005
+  snap_thresh:  3
+  scale_thresh: 0.03
+  angle_thresh: 5.0
+  debug:        False
+  verbose:      True
+  show: False
+  show_optim:   False
+  show_recon:   False
+  checkpoint:   False
+device: cuda
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/workspace/MotionVectorization/motion_vectorization/optimize_shapes.py", line 757, in <module>
+    main()
+    ~~~~^^
+  File "/workspace/MotionVectorization/motion_vectorization/optimize_shapes.py", line 265, in main
+    time_bank = pickle.load(open(os.path.join(video_folder, 'time_bank.pkl'), 'rb'))
+                            ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'motion_vectorization/outputs/hassan_None/time_bank.pkl'
+PROGRAM
+shapes_folder: motion_vectorization/outputs/hassan_None/shapes
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/workspace/MotionVectorization/motion_vectorization/create_motion_file.py", line 187, in <module>
+    main()
+    ~~~~^^
+  File "/workspace/MotionVectorization/motion_vectorization/create_motion_file.py", line 61, in main
+    for filename in os.listdir(shapes_folder):
+                    ~~~~~~~~~~^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'motion_vectorization/outputs/hassan_None/shapes'
+(base) root@30fb68955ee8:/workspace/MotionVectorization# ./scripts/convert_to_svg.sh hassan 30
+shapes_folder: motion_vectorization/outputs/hassan_None/shapes
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/workspace/MotionVectorization/motion_vectorization/create_motion_file.py", line 187, in <module>
+    main()
+    ~~~~^^
+  File "/workspace/MotionVectorization/motion_vectorization/create_motion_file.py", line 61, in main
+    for filename in os.listdir(shapes_folder):
+                    ~~~~~~~~~~^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'motion_vectorization/outputs/hassan_None/shapes'
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/workspace/MotionVectorization/motion_vectorization/full_motion_file.py", line 9, in <module>
+    motion_file = json.load(open(motion_file_path, 'rb'))
+                            ~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'motion_vectorization/outputs/hassan_None/motion_file.json'
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/workspace/MotionVectorization/svg_utils/create_svg_dense.py", line 3, in <module>
+    import drawSvg as draw
+ModuleNotFoundError: No module named 'drawSvg'
+(base) root@30fb68955ee8:/workspace/MotionVectorization# 

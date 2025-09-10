@@ -1,0 +1,98 @@
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'motion_vectorization/outputs/new_None/shapes'
+root@ec25add1092f:/workspace/MotionVectorization# ls -la videos/new/rgb/ | head -5
+total 0
+drwxr-xr-x 2 root root  10 Sep 10 12:34 .
+drwxr-xr-x 9 root root 129 Sep 10 12:34 ..
+root@ec25add1092f:/workspace/MotionVectorization# cd RAFT && python3 -c "from core.raft import RAFT; print('✅ RAFT imports work')" && cd ..
+✅ RAFT imports work
+root@ec25add1092f:/workspace/MotionVectorization# sed -i '1i import sys; sys.path.append("/workspace/MotionVectorization/RAFT")' RAFT/extract_flow.py
+root@ec25add1092f:/workspace/MotionVectorization# ./scripts/script.sh videos/new.txt
+videos/new.txt
+PREPROCESS
+new
+RAFT
+new
+0it [00:00, ?it/s]
+videos/new.txt
+CLUSTER
+new
+Configs:
+  video_file:   new
+  video_dir:    videos
+  output_dir:   outputs
+  start_frame:  0
+  max_frames:   100
+  bg_file:      None
+  bg_thresh:    0.1
+  lo_thresh:    30
+  hi_thresh:    100
+  max_radius:   3
+  add_contrast: False
+  link: False
+  min_cluster_size:     30
+  min_density:  0.15
+  min_dim:      5
+  config:       motion_vectorization/config/new.json
+  blur_kernel:  1
+  min_opt_size: 32
+  use_gpu:      True
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/workspace/MotionVectorization/motion_vectorization/extract_clusters.py", line 189, in <module>
+    main()
+  File "/workspace/MotionVectorization/motion_vectorization/extract_clusters.py", line 114, in main
+    frame_idx = frame_idxs[0]
+                ~~~~~~~~~~^^^
+IndexError: list index out of range
+TRACK
+Logging to motion_vectorization/logs/new_track_13667.out
+TIME: 2025-09-10 12:38:29.033301
+Configs:
+  video_file:   new
+  video_dir:    videos
+  output_dir:   motion_vectorization/outputs
+  suffix:       None
+  config:       motion_vectorization/config/new.json
+  max_frames:   100
+  start_frame:  0
+  base_frame:   0
+  min_cluster_size:     30
+  min_density:  0.15
+  bg_file:      None
+  main_match_thresh:    0.6
+  single_match_thresh:  0.2
+  num_match_shapes:     5
+  fallback_match_thresh:        0.6
+  drop_thresh:  0.05
+  breaks:       []
+  multiply:     False
+  all_joint:    False
+  manual_init:  False
+  hungarian:    False
+  min_opt_size: 32
+  blur_kernel:  1
+  lr:   0.01
+  p_weight:     0.1
+  n_steps:      50
+  use_gpu:      True
+  bleed:        50
+  overlap_thresh:       0.9
+  use_k:        False
+  use_r:        False
+  use_s:        False
+  use_t:        False
+  init_r:       False
+  init_s:       False
+  init_t:       False
+  verbose:      True
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/workspace/MotionVectorization/motion_vectorization/extract_shapes.py", line 1527, in <module>
+    main()
+  File "/workspace/MotionVectorization/motion_vectorization/extract_shapes.py", line 241, in main
+    frame_idx = dataloader.frame_idxs[t]
+                ~~~~~~~~~~~~~~~~~~~~~^^^
+IndexError: list index out of range

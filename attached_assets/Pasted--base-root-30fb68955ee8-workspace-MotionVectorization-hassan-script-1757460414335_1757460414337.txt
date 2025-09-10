@@ -1,0 +1,63 @@
+(base) root@30fb68955ee8:/workspace/MotionVectorization# # تشغيل المعالجة الكاملة لـ hassan
+./scripts/script.sh videos/hassan.txt
+videos/hassan.txt
+PREPROCESS
+hassan
+RAFT
+hassan
+Using device: cuda
+GPU Name: NVIDIA RTX A6000
+GPU Memory: 50.9 GB
+Model loaded on cuda
+0it [00:00, ?it/s]/workspace/MotionVectorization/RAFT/core/raft.py:99: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  with autocast(enabled=self.args.mixed_precision):
+/workspace/MotionVectorization/RAFT/core/raft.py:110: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  with autocast(enabled=self.args.mixed_precision):
+/opt/miniconda3/lib/python3.13/site-packages/torch/functional.py:554: UserWarning: torch.meshgrid: in an upcoming release, it will be required to pass the indexing argument. (Triggered internally at /pytorch/aten/src/ATen/native/TensorShape.cpp:4314.)
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+/workspace/MotionVectorization/RAFT/core/raft.py:127: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  with autocast(enabled=self.args.mixed_precision):
+70it [01:32,  1.33s/it]
+videos/hassan.txt
+CLUSTER
+hassan
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/workspace/MotionVectorization/motion_vectorization/extract_clusters.py", line 14, in <module>
+    from .utils import *
+  File "/workspace/MotionVectorization/motion_vectorization/utils.py", line 9, in <module>
+    from kornia.filters import gaussian_blur2d
+ModuleNotFoundError: No module named 'kornia'
+TRACK
+Logging to motion_vectorization/logs/hassan_track_30860.out
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/workspace/MotionVectorization/motion_vectorization/extract_shapes.py", line 19, in <module>
+    from .dataloader import DataLoader
+  File "/workspace/MotionVectorization/motion_vectorization/dataloader.py", line 7, in <module>
+    from .utils import get_numbers
+  File "/workspace/MotionVectorization/motion_vectorization/utils.py", line 9, in <module>
+    from kornia.filters import gaussian_blur2d
+ModuleNotFoundError: No module named 'kornia'
+OPTIM
+Logging to motion_vectorization/logs/hassan_optim_1263.out
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/workspace/MotionVectorization/motion_vectorization/optimize_shapes.py", line 20, in <module>
+    from . import compositing
+  File "/workspace/MotionVectorization/motion_vectorization/compositing.py", line 1, in <module>
+    import kornia
+ModuleNotFoundError: No module named 'kornia'
+PROGRAM
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/workspace/MotionVectorization/motion_vectorization/create_motion_file.py", line 12, in <module>
+    from .utils import get_numbers
+  File "/workspace/MotionVectorization/motion_vectorization/utils.py", line 9, in <module>
+    from kornia.filters import gaussian_blur2d
+ModuleNotFoundError: No module named 'kornia'
+(base) root@30fb68955ee8:/workspace/MotionVectorization# 

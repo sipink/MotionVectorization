@@ -1,0 +1,64 @@
+
+FRAME 34 (33) CLUSTERS
+========================
+[NOTE] Active shapes: [0]
+[NOTE] curr_fg_comp_to_label: defaultdict(<class 'list'>, {1: [0]})
+[NOTE] prev_fg_comp_to_label: defaultdict(<class 'list'>, {1: [0]})
+[TIME] Appearance-based matching took 0.31s
+[NOTE] prev_in_curr:
+ [[1.]]
+[NOTE] curr_in_prev:
+ [[1.]]
+matching: [[[0], [0]]]
+[NOTE] Main matching: [[[0], [0]]]
+[NOTE] Main prev_to_curr: defaultdict(<class 'list'>, {0: [0]})
+[NOTE] Main curr_to_prev: defaultdict(<class 'list'>, {0: [0]})
+[NOTE] Unmatched prev: set()
+[NOTE] Unmatched curr: set()
+[NOTE] Final prev_to_curr: defaultdict(<class 'list'>, {0: [0]})
+[NOTE] Final curr_to_prev: defaultdict(<class 'list'>, {0: [0]})
+[NOTE] Final matching: [[[0], [0]]]
+[NOTE] Matching component groups: [[[1], [1]]]
+[NOTE] target_to_element: defaultdict(<class 'list'>, {})
+[NOTE] 1-to-1 matching: 0 -> 0
+[NOTE] Case: A
+[NOTE] Matching weight: 0.0000
+Prev shape 0 occluded: False
+[VARS] All current shapes: [0]
+Unoccluded_canon: {0: True}
+[TIME] Processing frame 34 took 2.08s
+
+FRAME 35 (34) CLUSTERS
+========================
+[NOTE] Active shapes: [0]
+[NOTE] curr_fg_comp_to_label: defaultdict(<class 'list'>, {1: [0]})
+[NOTE] prev_fg_comp_to_label: defaultdict(<class 'list'>, {1: [0]})
+[TIME] Appearance-based matching took 0.31s
+[NOTE] prev_in_curr:
+ [[1.]]
+[NOTE] curr_in_prev:
+ [[1.]]
+matching: [[[0], [0]]]
+[NOTE] Main matching: [[[0], [0]]]
+[NOTE] Main prev_to_curr: defaultdict(<class 'list'>, {0: [0]})
+[NOTE] Main curr_to_prev: defaultdict(<class 'list'>, {0: [0]})
+[NOTE] Unmatched prev: set()
+[NOTE] Unmatched curr: set()
+[NOTE] Final prev_to_curr: defaultdict(<class 'list'>, {0: [0]})
+[NOTE] Final curr_to_prev: defaultdict(<class 'list'>, {0: [0]})
+[NOTE] Final matching: [[[0], [0]]]
+[NOTE] Matching component groups: [[[1], [1]]]
+[NOTE] target_to_element: defaultdict(<class 'list'>, {})
+[NOTE] 1-to-1 matching: 0 -> 0
+[NOTE] Case: A
+[NOTE] Matching weight: 0.0000
+Prev shape 0 occluded: False
+[VARS] All current shapes: [0]
+Unoccluded_canon: {0: True}
+[TIME] Processing frame 35 took 2.23s
+[NOTE] Time bank saved to: motion_vectorization/outputs/test1_None/time_bank.pkl
+/usr/local/lib/python3.11/dist-packages/torch/nn/functional.py:4236: UserWarning: Default grid_sample and affine_grid behavior has changed to align_corners=False since 1.3.0. Please specify align_corners=True if the old behavior is desired. See the documentation of grid_sample for details.
+  warnings.warn(
+/workspace/MotionVectorization/motion_vectorization/shape_context.py:162: RuntimeWarning: invalid value encountered in divide
+  add_cost = (Q_p2 - P_p)**2 / flag
+OPTIM

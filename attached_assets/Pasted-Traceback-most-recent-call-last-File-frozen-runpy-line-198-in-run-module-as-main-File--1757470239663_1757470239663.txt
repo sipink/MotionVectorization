@@ -1,0 +1,45 @@
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/workspace/MotionVectorization/motion_vectorization/extract_shapes.py", line 1529, in <module>
+    main()
+    ~~~~^^
+  File "/workspace/MotionVectorization/motion_vectorization/extract_shapes.py", line 768, in main
+    _, params_shapes, layer_zs, _, render_shapes_bleed, target_shapes, _, _, side_by_sides, on_tops, losses = optimize(
+                                                                                                              ~~~~~~~~^
+      elements, centroids_opt, targets, target_to_element,
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      np.array(sx_init), np.array(sy_init), np.array(theta_init), np.array(tx_init), np.array(ty_init), np.array(z_init),
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      0, 0, bg_crops, bleed=arg.bleed, use_k=arg.use_k, use_r=arg.use_r, use_s=arg.use_s, use_t=arg.use_t,
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      blur_kernel=arg.blur_kernel, lr=arg.lr, n_steps=arg.n_steps, min_size=arg.min_opt_size, p_weight=arg.p_weight, device=device)
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/MotionVectorization/motion_vectorization/utils.py", line 956, in optimize
+    output, params_shape, layer_z, alpha_shape, render_shape, targets, rgb_loss, alpha_loss, side_by_side, on_top, losses = compute_transforms(
+                                                                                                                            ~~~~~~~~~~~~~~~~~~^
+      elements, targets, bg_img, target_to_element, c_variables=shape_c_vars, layer_z=layer_z, default_c_vars=default_c_vars, default_z=default_z,
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      use_k=use_k, use_r=use_r, use_s=use_s, use_t=use_t, rgb_weight=rgb_weight,
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      blur_kernel=blur_kernel, origin=origin, min_size=min_size, lr=lr, n_steps=n_steps, p_weight=p_weight, bleed=bleed, loss_type='l1', device=device)
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/MotionVectorization/motion_vectorization/utils.py", line 395, in compute_transforms
+    gt_tensor_d = gaussian_blur2d(gt_tensor_d, (blur_kernel, blur_kernel), (blur_kernel, blur_kernel))
+  File "/opt/miniconda3/lib/python3.13/site-packages/kornia/filters/gaussian.py", line 84, in gaussian_blur2d
+    out = filter2d_separable(input, kernel_x, kernel_y, border_type)
+  File "/opt/miniconda3/lib/python3.13/site-packages/kornia/filters/filter.py", line 207, in filter2d_separable
+    out_x = filter2d(input, kernel_x[..., None, :], border_type, normalized, padding)
+  File "/opt/miniconda3/lib/python3.13/site-packages/kornia/filters/filter.py", line 140, in filter2d
+    input = pad(input, padding_shape, mode=border_type)
+  File "/opt/miniconda3/lib/python3.13/site-packages/torch/nn/functional.py", line 5209, in pad
+    return torch._C._nn.pad(input, pad, mode, value)
+           ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: Padding size should be less than the corresponding input dimension, but got: padding (7, 7) at dimension 3 of input [2, 4, 6, 6]
+total 7835
+drwxrwxrwx  4 root root 2005309 Sep  9 23:30 .
+drwxrwxrwx  4 root root 2009314 Sep  9 23:30 ..
+-rw-rw-rw-  1 root root    1031 Sep 10 00:57 arg.pkl
+drwxrwxrwx 18 root root 2005165 Sep  9 23:47 debug
+drwxrwxrwx  5 root root 2000143 Sep  9 23:30 outputs
+(base) root@30fb68955ee8:/workspace/MotionVectorization# 

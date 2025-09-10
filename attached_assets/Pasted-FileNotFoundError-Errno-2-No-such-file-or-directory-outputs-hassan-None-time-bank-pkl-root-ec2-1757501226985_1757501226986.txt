@@ -1,0 +1,72 @@
+FileNotFoundError: [Errno 2] No such file or directory: 'outputs/hassan_None/time_bank.pkl'
+root@ec25add1092f:/workspace/MotionVectorization# ln -sf motion_vectorization/outputs outputs
+root@ec25add1092f:/workspace/MotionVectorization# mkdir -p outputs/hassan_None
+cp motion_vectorization/outputs/hassan_None/time_bank.pkl outputs/hassan_None/
+root@ec25add1092f:/workspace/MotionVectorization# python3 -m motion_vectorization.optimize_shapes \
+    --video_file hassan.mp4 \
+    --config motion_vectorization/config/hassan.json
+2025-09-10 10:46:47.206188
+Configs:
+  video_file:   hassan.mp4
+  video_dir:    videos
+  output_dir:   outputs
+  suffix:       None
+  config:       motion_vectorization/config/hassan.json
+  date: None
+  frame_rate:   24
+  subsample_rate:       1
+  max_frames:   100
+  start_frame:  0
+  scale:        0.3
+  bg_thresh:    0.1
+  min_cluster_size:     30
+  median_radius:        5
+  cluster_eps:  5
+  cluster_min_samples:  10
+  bg_file:      None
+  init_weight:  0.0
+  init_thresh:  0.01
+  num_match_shapes:     5
+  match_radius: 120.0
+  main_match_thresh:    0.5
+  fallback_match_thresh:        0.5
+  match_method: hu
+  min_opt_size: 32
+  blur_kernel:  1
+  lr:   0.01
+  p_weight:     0.1
+  use_z:        True
+  n_steps:      50
+  use_gpu:      True
+  bleed:        50
+  all_joint:    False
+  overlap_thresh:       0.9
+  manual_init:  False
+  use_k:        False
+  use_r:        False
+  use_s:        False
+  use_t:        False
+  init_r:       False
+  init_s:       False
+  init_t:       False
+  drop_thresh:  0.005
+  snap_thresh:  3
+  scale_thresh: 0.03
+  angle_thresh: 5.0
+  debug:        False
+  verbose:      False
+  show: False
+  show_optim:   False
+  show_recon:   False
+  checkpoint:   False
+device: cuda
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/workspace/MotionVectorization/motion_vectorization/optimize_shapes.py", line 757, in <module>
+    main()
+  File "/workspace/MotionVectorization/motion_vectorization/optimize_shapes.py", line 269, in main
+    for filename in os.listdir(os.path.join(video_folder, 'shapes')):
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'outputs/hassan_None/shapes'
+root@ec25add1092f:/workspace/MotionVectorization# 

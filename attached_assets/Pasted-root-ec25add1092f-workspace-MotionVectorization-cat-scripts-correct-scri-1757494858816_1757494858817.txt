@@ -1,0 +1,64 @@
+root@ec25add1092f:/workspace/MotionVectorization# # إنشاء السكريپت الصحيح
+cat > scripts/correct_script.sh << 'EOF'
+#!/bin/bash
+set -e
+
+video_list=$1
+video_name=$(cat $video_list)
+
+echo "Processing video: $video_name"
+
+# PREPROCESS (الاسم الصحيح!)
+echo "PREPROCESS"
+python3 -m motion_vectorization.preprocess --video_file ${video_name}.mp4
+
+# RAFT
+echo "RAFT" 
+cd RAFT
+python3 extract_flow.py --video_file ${video_name}.mp4
+cd ..
+
+# CLUSTER
+echo "CLUSTER"
+python3 -m motion_vectorization.extract_clusters --video_file ${video_name}.mp4 --config motion_vectorization/config/${video_name}.json
+
+# TRACK
+echo "TRACK"
+python3 -m motion_vectorization.extract_shapes --video_file ${video_name}.mp4 --config motion_vectorization/config/${video_name}.json
+
+# OPTIM
+echo "OPTIM"
+python3 -m motion_vectorization.optimize_shapes --video_file ${video_name}.mp4 --config motion_vectorization/config/${video_name}.json
+
+# PROGRAM
+echo "PROGRAM"
+python3 -m motion_vectorization.create_motion_file --video_file ${video_name}.mp4 --config motion_vectorization/config/${video_name}.json
+
+echo "✅ Processing complete!"
+EOF
+
+chmod +x scripts/correct_script.sh
+root@ec25add1092f:/workspace/MotionVectorization# # تثبيت tqdm أولاً
+pip install tqdm
+
+# استخدام فيديو demo الموجود
+echo "demo" > videos/demo.txt
+
+# نسخ إعدادات hassan لـ demo
+cp motion_vectorization/config/hassan.json motion_vectorization/config/demo.json
+
+# اختبار preprocess أولاً
+python3 -m motion_vectorization.preprocess --video_file demo.mp4
+
+# إذا نجح، تشغيل المعالجة الكاملة
+./scripts/correct_script.sh videos/demo.txt
+Requirement already satisfied: tqdm in /usr/local/lib/python3.11/dist-packages (4.67.1)
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+Processing video: demo
+PREPROCESS
+RAFT
+Traceback (most recent call last):
+  File "/workspace/MotionVectorization/RAFT/extract_flow.py", line 13, in <module>
+    from .core.raft import RAFT
+ImportError: attempted relative import with no known parent package
+root@ec25add1092f:/workspace/MotionVectorization# 

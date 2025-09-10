@@ -1,0 +1,264 @@
+root@ec25add1092f:/workspace/MotionVectorization# ./scripts/convert_to_svg.sh test1 30
+[WARNING] Configs file not found! Using default.json instead.
+shapes_folder: motion_vectorization/outputs/test1_None/shapes
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/workspace/MotionVectorization/motion_vectorization/create_motion_file.py", line 187, in <module>
+    main()
+  File "/workspace/MotionVectorization/motion_vectorization/create_motion_file.py", line 61, in main
+    for filename in os.listdir(shapes_folder):
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'motion_vectorization/outputs/test1_None/shapes'
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/workspace/MotionVectorization/motion_vectorization/full_motion_file.py", line 9, in <module>
+    motion_file = json.load(open(motion_file_path, 'rb'))
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'motion_vectorization/outputs/test1_None/motion_file.json'
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/workspace/MotionVectorization/svg_utils/create_svg_dense.py", line 3, in <module>
+    import drawSvg as draw
+ModuleNotFoundError: No module named 'drawSvg'
+root@ec25add1092f:/workspace/MotionVectorization# ./scripts/script.sh videos/test.txt
+videos/test.txt
+PREPROCESS
+test1
+RAFT
+test1
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/workspace/MotionVectorization/RAFT/extract_flow.py", line 13, in <module>
+    from core.raft import RAFT
+ModuleNotFoundError: No module named 'core'
+videos/test.txt
+CLUSTER
+test1
+[WARNING] Configs file not found! Using default.json instead.
+Configs:
+  video_file:   test1.mp4
+  video_dir:    videos
+  output_dir:   motion_vectorization/outputs
+  start_frame:  0
+  max_frames:   300
+  bg_file:      None
+  bg_thresh:    0.1
+  lo_thresh:    30
+  hi_thresh:    100
+  max_radius:   3
+  add_contrast: True
+  link: False
+  min_cluster_size:     50
+  min_density:  0.15
+  min_dim:      5
+  config:       motion_vectorization/config/test1.json
+  suffix:       None
+  base_frame:   0
+  shapes:       None
+  num_match_shapes:     -1
+  main_match_thresh:    0.6
+  fallback_match_thresh:        0.6
+  single_match_thresh:  0.05
+  drop_thresh:  0.1
+  breaks:       []
+  multiply:     False
+  all_joint:    False
+  manual_init:  False
+  overlap_thresh:       0.5
+  init_thresh:  0.01
+  min_opt_size: 256
+  lr:   0.01
+  n_steps:      50
+  p_weight:     0.01
+  blur_kernel:  3
+  use_gpu:      False
+  bleed:        50
+  use_k:        True
+  use_r:        True
+  use_s:        True
+  use_t:        True
+  init_r:       True
+  init_s:       True
+  init_t:       True
+  snap_thresh:  3
+  scale_thresh: 0.03
+  angle_thresh: 0.0
+  verbose:      True
+100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 35/35 [00:07<00:00,  4.40it/s]
+TRACK
+Logging to motion_vectorization/logs/test1_track_1372.out
+TIME: 2025-09-10 09:42:01.264974
+[WARNING] Configs file not found! Using default.json instead.
+Configs:
+  video_file:   test1.mp4
+  video_dir:    videos
+  output_dir:   motion_vectorization/outputs
+  suffix:       None
+  config:       motion_vectorization/config/test1.json
+  max_frames:   300
+  start_frame:  0
+  base_frame:   0
+  min_cluster_size:     50
+  min_density:  0.15
+  bg_file:      None
+  main_match_thresh:    0.6
+  single_match_thresh:  0.05
+  num_match_shapes:     -1
+  fallback_match_thresh:        0.6
+  drop_thresh:  0.1
+  breaks:       []
+  multiply:     False
+  all_joint:    False
+  manual_init:  False
+  hungarian:    False
+  min_opt_size: 256
+  blur_kernel:  3
+  lr:   0.01
+  p_weight:     0.01
+  n_steps:      50
+  use_gpu:      False
+  bleed:        50
+  overlap_thresh:       0.5
+  use_k:        True
+  use_r:        True
+  use_s:        True
+  use_t:        True
+  init_r:       True
+  init_s:       True
+  init_t:       True
+  verbose:      True
+  shapes:       None
+  min_dim:      5
+  bg_thresh:    0.1
+  max_radius:   3
+  add_contrast: True
+  lo_thresh:    30
+  hi_thresh:    100
+  link: False
+  init_thresh:  0.01
+  snap_thresh:  3
+  scale_thresh: 0.03
+  angle_thresh: 0.0
+
+FRAME 1 (0) CLUSTERS
+========================
+[NOTE] Active shapes: []
+[VARS] All current shapes: [0]
+Unoccluded_canon: {0: True}
+[TIME] Processing frame 1 took 0.34s
+
+FRAME 2 (1) CLUSTERS
+========================
+tee: motion_vectorization/logs/test1_track_1372.out: No such file or directory
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/workspace/MotionVectorization/motion_vectorization/extract_shapes.py", line 1527, in <module>
+    main()
+  File "/workspace/MotionVectorization/motion_vectorization/extract_shapes.py", line 256, in main
+    curr_frame, curr_fg_labels, fg_bg, curr_fg_comps, forw_flow, back_flow = dataloader.load_data(t)
+                                                                             ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/MotionVectorization/motion_vectorization/dataloader.py", line 39, in load_data
+    forw_flow = np.load(os.path.join(self.forw_flow_folder, f'{self.frame_idxs[i - 1]:03d}.npy'))
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/dist-packages/numpy/lib/_npyio_impl.py", line 459, in load
+    fid = stack.enter_context(open(os.fspath(file), "rb"))
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'videos/test1/flow/forward/001.npy'
+OPTIM
+Logging to motion_vectorization/logs/test1_optim_639.out
+2025-09-10 09:42:06.513405
+[WARNING] Configs file not found! Using default.json instead.
+Configs:
+  video_file:   test1.mp4
+  video_dir:    videos
+  output_dir:   motion_vectorization/outputs
+  suffix:       None
+  config:       motion_vectorization/config/test1.json
+  date: None
+  frame_rate:   24
+  subsample_rate:       1
+  max_frames:   300
+  start_frame:  0
+  scale:        0.3
+  bg_thresh:    0.1
+  min_cluster_size:     50
+  median_radius:        5
+  cluster_eps:  5
+  cluster_min_samples:  10
+  bg_file:      None
+  init_weight:  0.0
+  init_thresh:  0.01
+  num_match_shapes:     -1
+  match_radius: 120.0
+  main_match_thresh:    0.6
+  fallback_match_thresh:        0.6
+  match_method: hu
+  min_opt_size: 256
+  blur_kernel:  3
+  lr:   0.01
+  p_weight:     0.01
+  use_z:        True
+  n_steps:      50
+  use_gpu:      False
+  bleed:        50
+  all_joint:    False
+  overlap_thresh:       0.5
+  manual_init:  False
+  use_k:        True
+  use_r:        True
+  use_s:        True
+  use_t:        True
+  init_r:       True
+  init_s:       True
+  init_t:       True
+  drop_thresh:  0.1
+  snap_thresh:  3
+  scale_thresh: 0.03
+  angle_thresh: 0.0
+  debug:        False
+  verbose:      True
+  show: False
+  show_optim:   False
+  show_recon:   False
+  checkpoint:   False
+  base_frame:   0
+  shapes:       None
+  min_density:  0.15
+  min_dim:      5
+  max_radius:   3
+  add_contrast: True
+  lo_thresh:    30
+  hi_thresh:    100
+  link: False
+  single_match_thresh:  0.05
+  breaks:       []
+  multiply:     False
+device: cpu
+tee: motion_vectorization/logs/test1_optim_639.out: No such file or directory
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/workspace/MotionVectorization/motion_vectorization/optimize_shapes.py", line 757, in <module>
+    main()
+  File "/workspace/MotionVectorization/motion_vectorization/optimize_shapes.py", line 265, in main
+    time_bank = pickle.load(open(os.path.join(video_folder, 'time_bank.pkl'), 'rb'))
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'motion_vectorization/outputs/test1_None/time_bank.pkl'
+PROGRAM
+[WARNING] Configs file not found! Using default.json instead.
+shapes_folder: motion_vectorization/outputs/test1_None/shapes
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/workspace/MotionVectorization/motion_vectorization/create_motion_file.py", line 187, in <module>
+    main()
+  File "/workspace/MotionVectorization/motion_vectorization/create_motion_file.py", line 61, in main
+    for filename in os.listdir(shapes_folder):
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'motion_vectorization/outputs/test1_None/shapes'
+root@ec25add1092f:/workspace/MotionVectorization# 

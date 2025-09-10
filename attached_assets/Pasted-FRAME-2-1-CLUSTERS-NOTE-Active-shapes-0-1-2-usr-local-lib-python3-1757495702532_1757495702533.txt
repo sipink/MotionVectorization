@@ -1,0 +1,63 @@
+FRAME 2 (1) CLUSTERS
+========================
+[NOTE] Active shapes: [0, 1, 2]
+/usr/local/lib/python3.11/dist-packages/torch/nn/functional.py:5015: UserWarning: Default grid_sample and affine_grid behavior has changed to align_corners=False since 1.3.0. Please specify align_corners=True if the old behavior is desired. See the documentation of grid_sample for details.
+  warnings.warn(
+[NOTE] curr_fg_comp_to_label: defaultdict(<class 'list'>, {np.int32(1): [np.int32(0), np.int32(1), np.int32(2)]})
+[NOTE] prev_fg_comp_to_label: defaultdict(<class 'list'>, {np.int32(1): [np.int32(0), np.int32(1), np.int32(2)]})
+/workspace/MotionVectorization/motion_vectorization/shape_context.py:162: RuntimeWarning: invalid value encountered in divide
+  add_cost = (Q_p2 - P_p)**2 / flag
+[TIME] Appearance-based matching took 0.37s
+[NOTE] prev_in_curr:
+ [[9.99412259e-01 2.51889169e-04 3.35852225e-04]
+ [6.03050727e-03 9.93969493e-01 0.00000000e+00]
+ [2.29949523e-02 0.00000000e+00 9.77005048e-01]]
+[NOTE] curr_in_prev:
+ [[9.93738521e-01 2.83853732e-03 3.42294206e-03]
+ [5.35045479e-04 9.99464955e-01 0.00000000e+00]
+ [2.29095074e-03 0.00000000e+00 9.97709049e-01]]
+matching: [[[0], [0]], [[1], [1]], [[2], [2]]]
+[NOTE] Main matching: [[[0], [0]], [[1], [1]], [[2], [2]]]
+[NOTE] Main prev_to_curr: defaultdict(<class 'list'>, {0: [0], 1: [1], 2: [2]})
+[NOTE] Main curr_to_prev: defaultdict(<class 'list'>, {0: [0], 1: [1], 2: [2]})
+[NOTE] Unmatched prev: set()
+[NOTE] Unmatched curr: set()
+[NOTE] Final prev_to_curr: defaultdict(<class 'list'>, {0: [0], 1: [1], 2: [2]})
+[NOTE] Final curr_to_prev: defaultdict(<class 'list'>, {0: [0], 1: [1], 2: [2]})
+[NOTE] Final matching: [[[0], [0]], [[1], [1]], [[2], [2]]]
+PERFORMANCE WARNING:
+Thresholded incomplete Cholesky decomposition failed due to insufficient positive-definiteness of matrix A with parameters:
+    discard_threshold = 1.000000e-04
+    shift = 0.000000e+00
+Try decreasing discard_threshold or start with a larger shift
+
+PERFORMANCE WARNING:
+Thresholded incomplete Cholesky decomposition failed due to insufficient positive-definiteness of matrix A with parameters:
+    discard_threshold = 1.000000e-04
+    shift = 1.000000e-04
+Try decreasing discard_threshold or start with a larger shift
+
+[NOTE] Matching component groups: [[[1], [1]]]
+[NOTE] target_to_element: defaultdict(<class 'list'>, {0: [0, 1, 2], 1: [3, 4, 5]})
+[NOTE] Optimizing...
+[TIME] Optimizing took 2.0662s
+target_in_output: [[0.94937026]]
+p0 falls in c0
+p0 covers ['c0']
+remaining mappings for c0: [('p0', 'c0')]
+target_in_output: [[0.95675903]]
+c0 falls in p0
+c0 covers ['p0']
+remaining mappings for p0: [('c0', 'p0')]
+[NOTE] Case: A
+[NOTE] Matching weight: 0.0339
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/workspace/MotionVectorization/motion_vectorization/extract_shapes.py", line 1527, in <module>
+    main()
+  File "/workspace/MotionVectorization/motion_vectorization/extract_shapes.py", line 1089, in main
+    prev_shape_mask = -1 * np.ones_like(fg_bg)
+                      ~~~^~~~~~~~~~~~~~~~~~~~~
+OverflowError: Python integer -1 out of bounds for uint8
+root@ec25add1092f:/workspace/MotionVectorization# 

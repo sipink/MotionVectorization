@@ -94,6 +94,20 @@ parser.add_argument(
   '--hungarian', action='store_true', default=False,
   help='Use hungarian matching for initialization.')
 
+# CoTracker3 integration
+parser.add_argument(
+  '--use_cotracker3', action='store_true', default=False,
+  help='Use CoTracker3 for superior point tracking instead of primitive shape matching.')
+parser.add_argument(
+  '--cotracker3_mode', type=str, default='offline', choices=['offline', 'online'],
+  help='CoTracker3 mode: offline for maximum accuracy, online for long videos.')
+parser.add_argument(
+  '--cotracker3_device', type=str, default='auto', choices=['auto', 'cuda', 'cpu'],
+  help='Device for CoTracker3 processing.')
+parser.add_argument(
+  '--cotracker3_grid_size', type=int, default=40,
+  help='Grid size for CoTracker3 point sampling (creates grid_size² points).')
+
 # Optimization.
 parser.add_argument(
   '--min_opt_size', default=200, type=int, 
@@ -212,7 +226,17 @@ def main():
       os.makedirs(folder)
 
   dataloader = DataLoader(video_dir, max_frames=arg.max_frames)
-  processor = Processor()
+  # Initialize processor with CoTracker3 if requested
+  processor = Processor(
+    use_cotracker3=arg.use_cotracker3,
+    cotracker3_mode=arg.cotracker3_mode,
+    device=arg.cotracker3_device
+  )
+  
+  if arg.use_cotracker3:
+    print(f"🚀 CoTracker3 integration enabled (mode: {arg.cotracker3_mode})")
+    print(f"   Grid size: {arg.cotracker3_grid_size}×{arg.cotracker3_grid_size} = {arg.cotracker3_grid_size**2} points")
+    print(f"   Device: {arg.cotracker3_device}")
   viz = Visualizer()
 
   # Load background job.
@@ -332,8 +356,20 @@ def main():
         cx, cy = get_shape_centroid(curr_shape[:, :, 3])
         curr_centroids.append([cx, cy])
 
-      shape_diffs, rgb_diffs = processor.get_appearance_graphs(
-        prev_shapes, curr_shapes, prev_centroids, curr_centroids)
+      # Use CoTracker3 for superior tracking if enabled
+      if arg.use_cotracker3 and processor.use_cotracker3:
+        print("🎯 Using CoTracker3 for shape correspondence")
+        shape_diffs, rgb_diffs, cotracker3_metadata = processor.get_cotracker3_correspondences(
+          prev_shapes, curr_shapes, prev_frame, curr_frame,
+          prev_centroids, curr_centroids
+        )
+        # Store CoTracker3 metadata for analysis
+        cotracker3_quality_scores = cotracker3_metadata.get('quality_scores', {})
+        print(f"   CoTracker3 quality scores: {[f'{k}:{v:.3f}' for k, v in cotracker3_quality_scores.items()]}")
+      else:
+        # Use original appearance-based matching
+        shape_diffs, rgb_diffs = processor.get_appearance_graphs(
+          prev_shapes, curr_shapes, prev_centroids, curr_centroids)
       appearance_t1 = time.perf_counter()
       print(f'[TIME] Appearance-based matching took {appearance_t1 - appearance_t0:.2f}s')
 
@@ -441,12 +477,23 @@ def main():
           cx, cy = get_shape_centroid(unmatched_curr_shape[:, :, 3])
           unmatched_curr_centroids.append([cx / curr_frame.shape[1], cy / curr_frame.shape[0]])
 
-        fallback_matching, costs = processor.fallback_matching(
-          unmatched_prev_shapes, unmatched_curr_shapes, 
-          unmatched_prev_centroids, unmatched_curr_centroids, 
-          frame_width, frame_height,
-          thresh=arg.fallback_match_thresh, 
-        )
+        # Use CoTracker3 enhanced fallback matching if enabled
+        if arg.use_cotracker3 and processor.use_cotracker3:
+          print("🔄 Using CoTracker3 enhanced fallback matching")
+          fallback_matching, costs = processor.cotracker3_fallback_matching(
+            unmatched_prev_shapes, unmatched_curr_shapes, 
+            unmatched_prev_centroids, unmatched_curr_centroids, 
+            frame_width, frame_height,
+            thresh=arg.fallback_match_thresh
+          )
+        else:
+          # Use original fallback matching
+          fallback_matching, costs = processor.fallback_matching(
+            unmatched_prev_shapes, unmatched_curr_shapes, 
+            unmatched_prev_centroids, unmatched_curr_centroids, 
+            frame_width, frame_height,
+            thresh=arg.fallback_match_thresh
+          )
         fallback_t1 = time.perf_counter()
         print('[NOTE] Fallback matches:', fallback_matching)
         print('[NOTE] Fallback matching costs:\n', costs)

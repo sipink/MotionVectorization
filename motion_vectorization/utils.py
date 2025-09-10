@@ -70,9 +70,9 @@ def get_shape_coords(mask, thresh=0.0):
 
 def get_shape_mask(labels, idx, expand=False, dtype=np.uint8):
   if expand:
-    return dtype(labels==idx)[..., None]
+    return np.array(dtype(labels==idx))[..., None]
   else:
-    return dtype(labels==idx)
+    return np.array(dtype(labels==idx))
 
 
 def get_shape_centroid(mask):
@@ -162,8 +162,8 @@ def compute_clusters_floodfill(fg_bg, edges, max_radius=3, min_cluster_size=50, 
   result = np.uint8(result)
   
   # Use modern connected components analysis instead of primitive fill methods
-  result_gray = cv2.cvtColor(result, cv2.COLOR_BGR2GRAY) if len(result.shape) == 3 else result
-  num_labels, labels = cv2.connectedComponents(result_gray.astype(np.uint8))
+  result_gray = cv2.cvtColor(np.ascontiguousarray(result, dtype=np.uint8), cv2.COLOR_BGR2GRAY) if len(result.shape) == 3 else result
+  num_labels, labels = cv2.connectedComponents(np.ascontiguousarray(result_gray, dtype=np.uint8))
   fillmap = labels.astype(np.int32)
 
   # Remove invalid clusters using modern approach
@@ -191,11 +191,11 @@ def clean_labels(labels, spatial, min_cluster_size):
   labels_new = np.zeros_like(labels)
   for l in np.unique(labels):
     l_mask = np.uint8(labels==l)
-    _, l_labels = cv2.connectedComponents(l_mask.astype(np.uint8))
+    _, l_labels = cv2.connectedComponents(np.ascontiguousarray(l_mask, dtype=np.uint8))
     for l_ in np.unique(l_labels):
       if l_ == 0:
         continue
-      if not is_valid_cluster(spatial, l_labels, l_, min_cluster_size=min_cluster_size):
+      if not is_valid_cluster(l_labels, l_, min_cluster_size=min_cluster_size):
         l_mask[l_labels==l_] = 0
     labels_new[l_mask==1] = l
   return labels_new
@@ -212,7 +212,7 @@ def get_comp_label_map(comps, labels):
       if l < 0:
         continue
       l_mask = np.uint8(labels==l)
-      lc_overlap = cv2.bitwise_and(c_mask.astype(np.uint8), l_mask.astype(np.uint8))
+      lc_overlap = cv2.bitwise_and(np.ascontiguousarray(c_mask, dtype=np.uint8), np.ascontiguousarray(l_mask, dtype=np.uint8))
       lc_overlap_sum = np.sum(lc_overlap)
       if lc_overlap_sum > 0:
         # assert l not in label_to_comp
@@ -297,15 +297,15 @@ def get_shape(frame, bg, labels, l, min_cluster_size=50, min_density=0.15):
   else:
     mask = np.zeros((frame.shape[0], frame.shape[1], 1))
     mask[labels==l] = 1
-    non_mask = np.uint8(labels>=0)
+    non_mask = np.array(np.uint8(labels>=0))
     non_mask[labels==l] = 0
     alpha = get_alpha(mask[..., 0], frame, exclude=non_mask)[..., None]
     rgb = frame * alpha + bg * (1 - alpha)
     shape = np.uint8(np.dstack([rgb, np.uint8(255 * alpha)]))
-    min_x = max(np.min(np.where(alpha>0)[1]), 0)
-    max_x = min(np.max(np.where(alpha>0)[1]) + 1, frame_width)
-    min_y = max(np.min(np.where(alpha>0)[0]), 0)
-    max_y = min(np.max(np.where(alpha>0)[0]) + 1, frame_height)
+    min_x = max(int(np.min(np.where(alpha>0)[1])), 0)
+    max_x = min(int(np.max(np.where(alpha>0)[1])) + 1, frame_width)
+    min_y = max(int(np.min(np.where(alpha>0)[0])), 0)
+    max_y = min(int(np.max(np.where(alpha>0)[0])) + 1, frame_height)
     centroid_x, centroid_y = get_shape_centroid(alpha[..., 0])
     density = np.sum(alpha) / ((max_x - min_x) * (max_y - min_y))
 
@@ -331,7 +331,7 @@ def compute_transforms(
   t2e_onehot = torch.stack([torch.sum(F.one_hot(
     torch.tensor(target_to_element[t], device=device).long(), num_classes=len(elements)
   ), dim=0) for t in target_to_element]).double()
-  t2e_onehot = t2e_onehot / torch.sum(t2e_onehot, dim=1, keepdims=True)
+  t2e_onehot = t2e_onehot / torch.sum(t2e_onehot, dim=1, keepdim=True)
   t1 = time.perf_counter()
   # print(f'[OPT_TIME] Making t2e_onehot took: {t1 - t0:.4f}s')
   
@@ -426,7 +426,7 @@ def compute_transforms(
   t0 = time.perf_counter()
   if origin is None:
     origin = torch.stack([
-      torch.mean(torch.stack(torch.where(elements_square[i, 3, :, :]>0)).float(), axis=1) for i in range(elements_square.shape[0])
+      torch.mean(torch.stack(torch.where(elements_square[i, 3, :, :]>0)).float(), dim=1) for i in range(elements_square.shape[0])
     ])
     origin = torch.flip(origin, dims=[1])
   origin *= torch.tensor(resize_ratios, dtype=torch.float64, device=device)
@@ -510,7 +510,8 @@ def compute_transforms(
     opt_var_names.append('z')
   optimizer, scheduler = compositing.init_optimizer(opt_variables, lr=lr)
   best_c_variables = [v.clone().detach() for v in c_variables]
-  best_c_variables.append(layer_z.clone().detach())
+  if layer_z is not None:
+    best_c_variables.append(layer_z.clone().detach())
   for v in best_c_variables:
     v.requires_grad = False
   min_loss = loss
@@ -532,11 +533,12 @@ def compute_transforms(
   for c, (render_all, f) in enumerate(zip(render_alls * loss_masks, frames_square)):
     best_render = np.uint8(255 * compositing.torch2numpy(render_all.detach().cpu()).copy())
     gt_frame = f[:, :, :3] / 255.0
-    for i in range(origin[target_to_element[c]].shape[0]):
-      ox, oy = origin[target_to_element[c][i]].detach().cpu().numpy()
-      best_render = cv2.circle(best_render, (int(ox * best_render.shape[1]), int(oy * best_render.shape[0])), 1, (255, 255, 255), 2)
+    if len(target_to_element[c]) > 0:
+      for i in range(len(target_to_element[c])):
+        ox, oy = origin[target_to_element[c][i]].detach().cpu().numpy()
+        best_render = cv2.circle(np.ascontiguousarray(best_render, dtype=np.uint8), (int(ox * best_render.shape[1]), int(oy * best_render.shape[0])), 1, (255, 255, 255), 2)
     sbs = np.uint8(np.concatenate([best_render, 255 * gt_frame]))
-    sbs = cv2.putText(sbs, 's0', (10, sbs.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
+    sbs = cv2.putText(np.ascontiguousarray(sbs, dtype=np.uint8), 's0', (10, sbs.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
     sbs = cv2.putText(sbs, f'{loss[c]:.4f}', (sbs.shape[1] - 50, sbs.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
     comp = np.uint8(np.abs(best_render - 255 * gt_frame))
     comp = np.pad(comp, ((0, 200), (0, 0), (0, 0)))
@@ -568,7 +570,7 @@ def compute_transforms(
     for step in range(n_steps):
       t2 = time.perf_counter()
       optimizer.zero_grad()
-      blur = torch.max(min_loss) > 5e-2
+      blur = bool(torch.max(min_loss) > 5e-2)
       render_alls, alphas = compositing.composite_layers(
         elements_square, c_variables, origin, target_to_element, elements_square.shape, backgrounds_square,
         layer_z=layer_z, blur=blur, blur_kernel=blur_kernel, debug=False, device=device
@@ -721,8 +723,8 @@ def propagate_labels(frame, fg_bg_clusters, fg_bg, debug=False):
   candidates = []
   cumulative_label_expand = np.zeros_like(fg_bg_binary, dtype=np.uint8)
   for l in unique_labels:
-    label_expand_region = cv2.bitwise_or(unlabeled, np.uint8(fg_bg_clusters==l))
-    cumulative_label_expand = cv2.bitwise_or(cumulative_label_expand, label_expand_region)
+    label_expand_region = cv2.bitwise_or(np.ascontiguousarray(unlabeled, dtype=np.uint8), np.ascontiguousarray(np.uint8(fg_bg_clusters==l), dtype=np.uint8))
+    cumulative_label_expand = cv2.bitwise_or(np.ascontiguousarray(cumulative_label_expand, dtype=np.uint8), np.ascontiguousarray(label_expand_region, dtype=np.uint8))
     _, unlabeled_comps = cv2.connectedComponents(label_expand_region)
     comp_masks = []
     for k in np.unique(unlabeled_comps):
@@ -800,10 +802,10 @@ def pad_to_square(img, dim=None, color=None):
 def get_moment_features(img, radius=None, degree=8):
   gray = cv2.cvtColor(img[:, :, :3], cv2.COLOR_BGR2GRAY)
   shape_mask = np.uint8(img[:, :, 3]>0)
-  min_x = max(np.min(np.where(shape_mask==1)[1]) - 10, 0)
-  max_x = min(np.max(np.where(shape_mask==1)[1]) + 10, shape_mask.shape[1])
-  min_y = max(np.min(np.where(shape_mask==1)[0]) - 10, 0)
-  max_y = max(np.max(np.where(shape_mask==1)[0]) + 10, shape_mask.shape[0])
+  min_x = max(int(np.min(np.where(shape_mask==1)[1])) - 10, 0)
+  max_x = min(int(np.max(np.where(shape_mask==1)[1])) + 10, shape_mask.shape[1])
+  min_y = max(int(np.min(np.where(shape_mask==1)[0])) - 10, 0)
+  max_y = min(int(np.max(np.where(shape_mask==1)[0])) + 10, shape_mask.shape[0])
   if radius is None:
     radius = np.sqrt((max_x - min_x)**2 + (max_y - min_y)**2) // 2
   pad = int(radius * (np.sqrt(2) - 1))
@@ -846,17 +848,17 @@ def init_rot_scale(prev_crop, curr_crop, prev_angle, bg_crop, over_mask=None, p_
   min_rot_diff = np.inf
   best_rgb_diff = np.inf
   best_angle_diff = np.inf
-  best_rot = None
-  best_fallback_rot = None
+  best_rot = 0.0
+  best_fallback_rot = 0.0
   if over_mask is None:
     over_mask = np.ones_like(curr_crop[:, :, 3])
   for abs_angle in range(0, 180, 2):
     for angle in [prev_angle + abs_angle, prev_angle - abs_angle]:
       prev_crop_rot = ndimage.rotate(prev_crop, angle, order=0)
-      t_min_x = np.min(np.where(prev_crop_rot[:, :, -1]>0)[1])
-      t_max_x = np.max(np.where(prev_crop_rot[:, :, -1]>0)[1]) + 1
-      t_min_y = np.min(np.where(prev_crop_rot[:, :, -1]>0)[0])
-      t_max_y = np.max(np.where(prev_crop_rot[:, :, -1]>0)[0]) + 1
+      t_min_x = int(np.min(np.where(prev_crop_rot[:, :, -1]>0)[1]))
+      t_max_x = int(np.max(np.where(prev_crop_rot[:, :, -1]>0)[1])) + 1
+      t_min_y = int(np.min(np.where(prev_crop_rot[:, :, -1]>0)[0]))
+      t_max_y = int(np.max(np.where(prev_crop_rot[:, :, -1]>0)[0])) + 1
       prev_crop_rot = prev_crop_rot[t_min_y:t_max_y, t_min_x:t_max_x]
       prev_crop_rot = cv2.resize(prev_crop_rot, (curr_crop.shape[1], curr_crop.shape[0]))
       if len(prev_crop_rot.shape) < 3:

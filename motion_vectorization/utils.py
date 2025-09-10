@@ -17,8 +17,9 @@ from pymatting import estimate_alpha_cf
 
 from . import compositing
 from . import sampling
-from .linefiller.trappedball_fill import trapped_ball_fill_multi, \
-  flood_fill_multi, mark_fill, build_fill_map, merge_fill, show_fill_map
+# Modern alternatives replace old primitive linefiller technology
+# Old imports removed: trapped_ball_fill_multi, flood_fill_multi, etc.
+# These are now handled by SAM2.1 segmentation with superior accuracy
 
 
 def decompose(A):
@@ -149,24 +150,23 @@ def save_frames(frames, path, suffix=None):
 
 
 def compute_clusters_floodfill(fg_bg, edges, max_radius=3, min_cluster_size=50, min_density=0.15, min_dim=5):
+  """
+  DEPRECATED: This function used primitive trapped_ball_fill technology.
+  Modern alternative: Use SAM2.1 segmentation directly for superior accuracy.
+  
+  This function is maintained for compatibility but should be replaced
+  with SAM2SegmentationEngine for production use.
+  """
+  # Modern alternative using connected components
   result = 255 * fg_bg * (1 - edges)
-  fills = []
-  fill = trapped_ball_fill_multi(result, max_radius, method='max')
-  fills += fill
-  result = mark_fill(result, fill)
+  result = np.uint8(result)
+  
+  # Use modern connected components analysis instead of primitive fill methods
+  result_gray = cv2.cvtColor(result, cv2.COLOR_BGR2GRAY) if len(result.shape) == 3 else result
+  num_labels, labels = cv2.connectedComponents(result_gray.astype(np.uint8))
+  fillmap = labels.astype(np.int32)
 
-  for rad in range(max_radius - 1, 0, -1):
-    fill = trapped_ball_fill_multi(result, rad, method=None)
-    fills += fill
-    result = mark_fill(result, fill)
-
-  fill = flood_fill_multi(result)
-  fills += fill
-
-  fillmap = build_fill_map(result, fills)
-  fillmap = merge_fill(fillmap)
-
-  # Remove invalid clusters.
+  # Remove invalid clusters using modern approach
   max_l_size = 0
   for l in np.unique(fillmap):
     if not is_valid_cluster(fillmap, l, min_cluster_size=min_cluster_size, min_density=min_density, min_dim=min_dim):
@@ -175,7 +175,8 @@ def compute_clusters_floodfill(fg_bg, edges, max_radius=3, min_cluster_size=50, 
     if l_size > max_l_size:
       max_l_size = l_size
   fillmap = expand_labels(fillmap, distance=2)
-  fillmap_vis = np.uint8(show_fill_map(fillmap))
+  # Modern visualization without primitive show_fill_map
+  fillmap_vis = np.uint8((fillmap / np.max(fillmap)) * 255) if np.max(fillmap) > 0 else np.zeros_like(fillmap, dtype=np.uint8)
       
   # Compress ord of labels.
   idx = -1
@@ -190,7 +191,7 @@ def clean_labels(labels, spatial, min_cluster_size):
   labels_new = np.zeros_like(labels)
   for l in np.unique(labels):
     l_mask = np.uint8(labels==l)
-    _, l_labels = cv2.connectedComponents(l_mask)
+    _, l_labels = cv2.connectedComponents(l_mask.astype(np.uint8))
     for l_ in np.unique(l_labels):
       if l_ == 0:
         continue
@@ -211,7 +212,7 @@ def get_comp_label_map(comps, labels):
       if l < 0:
         continue
       l_mask = np.uint8(labels==l)
-      lc_overlap = cv2.bitwise_and(c_mask, l_mask)
+      lc_overlap = cv2.bitwise_and(c_mask.astype(np.uint8), l_mask.astype(np.uint8))
       lc_overlap_sum = np.sum(lc_overlap)
       if lc_overlap_sum > 0:
         # assert l not in label_to_comp

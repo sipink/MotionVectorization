@@ -112,10 +112,10 @@ install_transformers() {
     pip install --no-cache-dir --upgrade \
         transformers==$TRANSFORMERS_VERSION \
         accelerate==$ACCELERATE_VERSION \
-        timm>=1.0.11 \
-        bitsandbytes>=0.45.0 \
-        flash-attn>=2.5.0 \
-        xformers>=0.0.23
+        timm\>=1.0.11 \
+        bitsandbytes\>=0.45.0 \
+        flash-attn\>=2.5.0 \
+        xformers\>=0.0.23
     
     log_success "Transformers and AI libraries installed"
 }
@@ -209,9 +209,9 @@ install_flowseek() {
     
     # Install dependencies for FlowSeek
     pip install --no-cache-dir \
-        einops>=0.8.0 \
-        kornia>=0.7.3 \
-        lpips>=0.1.4
+        einops\>=0.8.0 \
+        kornia\>=0.7.3 \
+        lpips\>=0.1.4
     
     # Note: FlowSeek integration is built into the motion_vectorization module
     # The actual FlowSeek implementation is integrated within our codebase
@@ -224,12 +224,12 @@ install_performance_libs() {
     log_info "Installing performance optimization libraries..."
     
     pip install --no-cache-dir \
-        ninja>=1.11.1 \
-        tensorboard>=2.15.0 \
-        wandb>=0.16.0 \
-        psutil>=5.9.0 \
-        numba>=0.58.0 \
-        cupy-cuda12x>=13.0.0
+        ninja\>=1.11.1 \
+        tensorboard\>=2.15.0 \
+        wandb\>=0.16.0 \
+        psutil\>=5.9.0 \
+        numba\>=0.58.0 \
+        cupy-cuda12x\>=13.0.0
     
     log_success "Performance libraries installed"
 }

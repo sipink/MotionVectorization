@@ -195,16 +195,15 @@ parser.add_argument(
 parser.add_argument(
   '--verbose', action='store_true', default=False, 
   help='If true, print intermediate messages and outputs.')
-arg = parser.parse_args()
 
 d = datetime.date.today().strftime("%d%m%y")
 now = datetime.datetime.now()
 print('TIME:', now)
 
-arg = parser.parse_args()
-video_name = os.path.splitext(arg.video_file.split('/')[-1])[0]
-if arg.config is not None:
-  configs_file = arg.config
+args = parser.parse_args()
+video_name = os.path.splitext(args.video_file.split('/')[-1])[0]
+if args.config is not None:
+  configs_file = args.config
 
   if not os.path.exists(configs_file):
     print('[WARNING] Configs file not found! Using default.json instead.')
@@ -212,24 +211,24 @@ if arg.config is not None:
 
   configs = json.load(open(configs_file, 'r'))
   parser.set_defaults(**configs)
-  arg = parser.parse_args()
+  args = parser.parse_args()
 print('Configs:')
-for arg_name, arg_val in vars(arg).items():
+for arg_name, arg_val in vars(args).items():
   print(f'  {arg_name}:\t{arg_val}')
 
 np.random.seed(1)
 torch.manual_seed(0)
 
 def main():
-  device = 'cuda' if arg.use_gpu else 'cpu'
-  video_dir = os.path.join(arg.video_dir, video_name)
+  device = 'cuda' if args.use_gpu else 'cpu'
+  video_dir = os.path.join(args.video_dir, video_name)
 
   # Create output directories.
-  if not os.path.exists(arg.output_dir):
-    os.makedirs(arg.output_dir)
+  if not os.path.exists(args.output_dir):
+    os.makedirs(args.output_dir)
   video_folder = os.path.join(
-    arg.output_dir, 
-    f'{video_name}_{arg.suffix}')
+    args.output_dir, 
+    f'{video_name}_{args.suffix}')
   track_folder = os.path.join(video_folder, 'outputs', 'track')
   debug_opt_folder = os.path.join(video_folder, 'debug', 'track_opt')
   debug_rot_folder = os.path.join(video_folder, 'debug', 'track_rotate')
@@ -261,24 +260,24 @@ def main():
     if not os.path.exists(folder):
       os.makedirs(folder)
 
-  dataloader = DataLoader(video_dir, max_frames=arg.max_frames)
+  dataloader = DataLoader(video_dir, max_frames=args.max_frames)
   # Initialize processor with CoTracker3 if requested
   processor = Processor(
-    use_cotracker3=arg.use_cotracker3,
-    cotracker3_mode=arg.cotracker3_mode,
-    device=arg.cotracker3_device
+    use_cotracker3=args.use_cotracker3,
+    cotracker3_mode=args.cotracker3_mode,
+    device=args.cotracker3_device
   )
   
-  if arg.use_cotracker3:
-    print(f"🚀 CoTracker3 integration enabled (mode: {arg.cotracker3_mode})")
-    print(f"   Grid size: {arg.cotracker3_grid_size}×{arg.cotracker3_grid_size} = {arg.cotracker3_grid_size**2} points")
-    print(f"   Device: {arg.cotracker3_device}")
+  if args.use_cotracker3:
+    print(f"🚀 CoTracker3 integration enabled (mode: {args.cotracker3_mode})")
+    print(f"   Grid size: {args.cotracker3_grid_size}×{args.cotracker3_grid_size} = {args.cotracker3_grid_size**2} points")
+    print(f"   Device: {args.cotracker3_device}")
   viz = Visualizer()
 
   # Load background job.
   bg_img = None
-  if arg.bg_file is not None:
-    bg_img = cv2.imread(arg.bg_file)
+  if args.bg_file is not None:
+    bg_img = cv2.imread(args.bg_file)
 
   color = {-1: np.random.randint(0, 255, (3))}  # Contains background cluster color.
   shape_bank = {-1: []}
@@ -296,12 +295,12 @@ def main():
   prev_fg_labels = -1
   label_mapping = {}  # Maps shape indices in this frame to shape indices across entire video.
   unoccluded_canon = {}
-  frame_ordering = [i for i in range(arg.base_frame, -1, -1)] + [i for i in range(arg.base_frame + 1, len(dataloader.frame_idxs))]
+  frame_ordering = [i for i in range(args.base_frame, -1, -1)] + [i for i in range(args.base_frame + 1, len(dataloader.frame_idxs))]
   for t in frame_ordering:
     frame_idx = dataloader.frame_idxs[t]
-    if t < arg.start_frame:
+    if t < args.start_frame:
       continue
-    if t == arg.base_frame + 1:
+    if t == args.base_frame + 1:
       optim_bank = base_bank
       prev_fg_labels = base_fg_labels
       prev_fg_comps = base_fg_comps
@@ -324,7 +323,7 @@ def main():
     # Fix: Ensure lab_mode has 3 channels for LAB2BGR conversion
     lab_mode_3ch = np.uint8(np.array(lab_mode)[None, None, :])  # Shape: (1, 1, 3)
     bgr_mode = cv2.cvtColor(lab_mode_3ch, cv2.COLOR_LAB2BGR).squeeze()
-    if t <= arg.base_frame:
+    if t <= args.base_frame:
       time_bank['bgr'].insert(0, bgr_mode)
     else:
       time_bank['bgr'].append(bgr_mode)
@@ -332,20 +331,20 @@ def main():
     new_fg_labels = -1 * np.ones_like(curr_fg_labels, dtype=np.int32)
 
     # Create background image.
-    if arg.bg_file is None:
+    if args.bg_file is None:
       bg_img = np.full((frame_height, frame_width, 3), np.array(bgr_mode))
 
     active_shapes = np.unique(prev_fg_labels)[1:].tolist()
     curr_labels = np.unique(curr_fg_labels)[1:].tolist()
     print('[NOTE] Active shapes:', active_shapes)
-    if len(active_shapes) > 0 and len(curr_labels) > 0 and frame_idx not in arg.breaks:
+    if len(active_shapes) > 0 and len(curr_labels) > 0 and frame_idx not in args.breaks:
       #######
       # 2. Warp the labels forward/backward and compute an IOU graph (add IOU in each direction).
       #    Collect all shapes which have a very high (thresh) IOU and match them. For remaining shapes,
       #    Look at the one-sided IOU and match shapes with a high one-sided IOU (thresh). This should
       #    guarantee a set of one-to-many or many-to-one matches.
       #######
-      if t <= arg.base_frame:
+      if t <= args.base_frame:
         curr_warped_labels, prev_warped_labels = processor.warp_labels(
           curr_fg_labels, prev_fg_labels, back_flow, forw_flow)
       else:
@@ -393,10 +392,10 @@ def main():
         curr_centroids.append([cx, cy])
 
       # Enhanced tracking with modern engines (CoTracker3 primary, robust fallbacks)
-      tracking_method = "cotracker3" if (arg.use_cotracker3 and processor.use_cotracker3) else "enhanced_rgb"
+      tracking_method = "cotracker3" if (args.use_cotracker3 and processor.use_cotracker3) else "enhanced_rgb"
       
       # Use CoTracker3 for superior tracking if enabled
-      if arg.use_cotracker3 and processor.use_cotracker3:
+      if args.use_cotracker3 and processor.use_cotracker3:
         print("🎯 Using CoTracker3 for shape correspondence")
         tracking_method = "cotracker3"
         try:
@@ -412,15 +411,15 @@ def main():
           if avg_quality > 0:
             print(f"   CoTracker3 quality scores: {[f'{k}:{v:.3f}' for k, v in cotracker3_quality_scores.items()]}")
             print(f"   Average quality: {avg_quality:.1%}")
-            if avg_quality < arg.quality_threshold and arg.progressive_fallback:
-              print(f"   ⚠️ Quality below threshold ({arg.quality_threshold:.1%}), using enhanced RGB analysis")
+            if avg_quality < args.quality_threshold and args.progressive_fallback:
+              print(f"   ⚠️ Quality below threshold ({args.quality_threshold:.1%}), using enhanced RGB analysis")
               tracking_method = "enhanced_rgb"
           else:
             print(f"   ⚠️ CoTracker3 tracking failed, using enhanced RGB analysis")
             tracking_method = "enhanced_rgb"
         except Exception as e:
           print(f"   ❌ CoTracker3 tracking error: {e}")
-          if not arg.progressive_fallback:
+          if not args.progressive_fallback:
             raise e
           print(f"   🔄 Using enhanced RGB analysis fallback")
           tracking_method = "enhanced_rgb"
@@ -436,15 +435,15 @@ def main():
       # Optical flow-based match graphs.
       prev_in_curr, curr_in_prev = processor.compute_match_graphs(
         np.array(curr_labels), np.array(active_shapes), curr_fg_labels, prev_fg_labels, curr_warped_labels, prev_warped_labels)
-      if arg.multiply:
+      if args.multiply:
         joint_scores = (shape_diffs) * (rgb_diffs) * (prev_in_curr * curr_in_prev.T)
-      elif arg.all_joint:
+      elif args.all_joint:
         joint_scores = (shape_diffs + rgb_diffs + prev_in_curr + curr_in_prev.T) / 4
-      elif arg.hungarian:
+      elif args.hungarian:
         joint_scores = 1 / (shape_diffs + rgb_diffs + prev_in_curr + curr_in_prev.T)
       else:
         joint_scores = (shape_diffs) * (rgb_diffs) * (prev_in_curr + curr_in_prev.T) / 2
-      joint_scores[joint_scores < arg.single_match_thresh] = 0.0
+      joint_scores[joint_scores < args.single_match_thresh] = 0.0
       # for i in range(joint_scores.shape[0]):
       #   row_max = np.max(joint_scores[i])
       #   new_row = joint_scores[i].copy()
@@ -457,7 +456,7 @@ def main():
 
       # Visualize prev -> curr and curr -> prev graph.
       matching_digraph_vis = viz.matching_digraph(
-        np.uint8(prev_in_curr>arg.main_match_thresh), np.uint8(curr_in_prev>arg.main_match_thresh))
+        np.uint8(prev_in_curr>args.main_match_thresh), np.uint8(curr_in_prev>args.main_match_thresh))
       shape_diffs_vis = viz.vis_graph(shape_diffs)
       rgb_diffs_vis = viz.vis_graph(rgb_diffs)
       prev_in_curr_vis = viz.vis_graph(prev_in_curr, mark_pos=True)
@@ -486,7 +485,7 @@ def main():
       cv2.imwrite(os.path.join(debug_digraph_folder, f'{frame_idx:03d}.png'), matching_digraph_vis)
       cv2.imwrite(os.path.join(debug_matrix_folder, f'{frame_idx:03d}.png'), matrix_vis)
 
-      if arg.hungarian:
+      if args.hungarian:
         matching, unmatched_prev, unmatched_curr = processor.hungarian_matching(joint_scores)
       else:
         matching, unmatched_prev, unmatched_curr = processor.main_matching(joint_scores)
@@ -538,13 +537,13 @@ def main():
           unmatched_curr_centroids.append([cx / curr_frame.shape[1], cy / curr_frame.shape[0]])
 
         # Use advanced fallback matching with CoTracker3 features when available
-        if arg.use_cotracker3 and processor.use_cotracker3:
+        if args.use_cotracker3 and processor.use_cotracker3:
           print("🎯 CoTracker3 enhanced fallback matching")
           fallback_matching, costs, confidence_scores = processor.cotracker3_fallback_matching(
             unmatched_prev_shapes, unmatched_curr_shapes, 
             unmatched_prev_centroids, unmatched_curr_centroids, 
             frame_width, frame_height,
-            thresh=arg.fallback_match_thresh
+            thresh=args.fallback_match_thresh
           )
           print(f"   Fallback confidence scores: {confidence_scores}")
         else:
@@ -553,7 +552,7 @@ def main():
             unmatched_prev_shapes, unmatched_curr_shapes, 
             unmatched_prev_centroids, unmatched_curr_centroids, 
             frame_width, frame_height,
-            thresh=arg.fallback_match_thresh
+            thresh=args.fallback_match_thresh
           )
         fallback_t1 = time.perf_counter()
         print('[NOTE] Fallback matches:', fallback_matching)
@@ -691,7 +690,7 @@ def main():
                 AffineTransform, min_samples=min(len(idxs), 3),
                 residual_threshold=2, max_trials=100
               )
-              if arg.all_joint:
+              if args.all_joint:
                 if len(match_dict[i]) == 1 and len(other_match_dict[match_dict[i][0]]) == 1 and other_match_dict[match_dict[i][0]][0] == i:
                   best_match = match_dict[i][np.argmax(joint_score[i][match_dict[i]])]
                   best_flow_match = match_dict[i][np.argmax(init_score[i][match_dict[i]])]
@@ -718,13 +717,13 @@ def main():
                 sx *= sx_init[-1]
                 sy *= sy_init[-1]
                 theta = model.rotation
-              if arg.init_s:
+              if args.init_s:
                 sx_init[-1] = sx
                 sy_init[-1] = sy
-              if arg.init_r:
+              if args.init_r:
                 theta_init[-1] += theta
               # Estimate the translation of the shape.
-              if arg.all_joint:
+              if args.all_joint:
                 best_match = np.argmax(joint_score[i])
                 target_alpha = np.uint8(to_fg_labels==to_labels[best_match])
                 target_cx, target_cy = get_shape_centroid(target_alpha)
@@ -755,7 +754,7 @@ def main():
                     target_alpha = np.uint8(to_fg_labels==to_labels[match_dict[i][best_match]])
                     target_cx, target_cy = get_shape_centroid(target_alpha)
               # Be careful to place shapes completely within the bounds of the frame.
-              if arg.init_t:
+              if args.init_t:
                 cx = max(shape_crop.shape[1] // 2, min(target_cx, from_frame.shape[1] - shape_crop.shape[1] // 2))
                 cy = max(shape_crop.shape[0] // 2, min(target_cy, from_frame.shape[0] - shape_crop.shape[0] // 2))
                 tx_init.append(target_cx - cx)
@@ -875,10 +874,10 @@ def main():
         _, params_shapes, layer_zs, _, render_shapes_bleed, target_shapes, _, _, side_by_sides, on_tops, losses = optimize(
           elements, centroids_opt, targets, target_to_element,
           np.array(sx_init), np.array(sy_init), np.array(theta_init), np.array(tx_init), np.array(ty_init), np.array(z_init), 
-          0, 0, bg_crops, bleed=arg.bleed, use_k=arg.use_k, use_r=arg.use_r, use_s=arg.use_s, use_t=arg.use_t, 
-          blur_kernel=arg.blur_kernel, lr=arg.lr, n_steps=arg.n_steps, min_size=arg.min_opt_size, p_weight=arg.p_weight, device=device)
+          0, 0, bg_crops, bleed=args.bleed, use_k=args.use_k, use_r=args.use_r, use_s=args.use_s, use_t=args.use_t, 
+          blur_kernel=args.blur_kernel, lr=args.lr, n_steps=args.n_steps, min_size=args.min_opt_size, p_weight=args.p_weight, device=device)
         render_shapes = [
-          render_shape[arg.bleed:render_shape.shape[0] - arg.bleed, arg.bleed:render_shape.shape[1] - arg.bleed] for render_shape in render_shapes_bleed]
+          render_shape[args.bleed:render_shape.shape[0] - args.bleed, args.bleed:render_shape.shape[1] - args.bleed] for render_shape in render_shapes_bleed]
         all_tx, all_ty, all_sx, all_sy, all_theta, all_kx, all_ky = params_shapes
         t1 = time.perf_counter()
         print(f'[TIME] Optimizing took {t1 - t0:.4f}s')

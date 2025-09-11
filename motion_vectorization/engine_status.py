@@ -9,7 +9,11 @@ import warnings
 from datetime import datetime
 from typing import Dict, List, Tuple, Optional
 
-# Try to import PyTorch
+# Try to import PyTorch with robust error handling
+torch = None  # Initialize torch as None first
+TORCH_AVAILABLE = False
+PYTORCH_VERSION = "Not installed"
+
 try:
     import torch
     TORCH_AVAILABLE = True
@@ -17,7 +21,6 @@ try:
 except Exception as e:
     TORCH_AVAILABLE = False
     PYTORCH_VERSION = "Not installed"
-    torch = None
 
 # ANSI color codes for terminal output
 class Colors:
@@ -47,14 +50,17 @@ def check_engine_availability() -> Dict[str, Dict]:
         'system': {'pytorch_version': PYTORCH_VERSION, 'python_version': sys.version.split()[0]}
     }
     
-    # Check GPU availability
-    if TORCH_AVAILABLE:
+    # Check GPU availability with proper torch import check
+    if TORCH_AVAILABLE and torch is not None:
         try:
             if torch.cuda.is_available():
                 status['gpu']['available'] = True
                 status['gpu']['device'] = torch.cuda.get_device_name(0)
                 status['gpu']['memory'] = f"{torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB"
                 status['gpu']['cuda_version'] = torch.version.cuda
+                status['gpu']['details'] = [f'✅ GPU detected: {status["gpu"]["device"]} with {status["gpu"]["memory"]} memory']
+            else:
+                status['gpu']['details'] = ['❌ No CUDA-capable GPU detected']
         except Exception as e:
             status['gpu']['details'] = [f'GPU check error: {e}']
     else:
@@ -89,21 +95,25 @@ def check_engine_availability() -> Dict[str, Dict]:
     # Check CoTracker3 availability
     try:
         # CoTracker3 should be available via torch.hub
-        if TORCH_AVAILABLE:
+        if TORCH_AVAILABLE and torch is not None:
             try:
                 # Import torch.hub only if torch is available
-                import torch.hub
-                status['cotracker3']['available'] = True
-                status['cotracker3']['details'].append('✅ torch.hub available for CoTracker3')
-                status['cotracker3']['version'] = 'CoTracker3 (Oct 2024)'
+                if hasattr(torch, 'hub'):
+                    import torch.hub
+                    status['cotracker3']['available'] = True
+                    status['cotracker3']['details'].append('✅ torch.hub available for CoTracker3')
+                    status['cotracker3']['version'] = 'CoTracker3 (Oct 2024)'
+                else:
+                    status['cotracker3']['details'].append('❌ torch.hub not available')
                 
-                # Check if model can be loaded
-                try:
-                    # Try listing available models
-                    torch.hub.list('facebookresearch/co-tracker', force_reload=False)
-                    status['cotracker3']['details'].append('✅ CoTracker3 models accessible')
-                except Exception as hub_e:
-                    status['cotracker3']['details'].append(f'⚠️ CoTracker3 hub access: {hub_e}')
+                    # Check if model can be loaded
+                    try:
+                        # Try listing available models
+                        if torch is not None and hasattr(torch, 'hub'):
+                            torch.hub.list('facebookresearch/co-tracker', force_reload=False)
+                            status['cotracker3']['details'].append('✅ CoTracker3 models accessible')
+                    except Exception as hub_e:
+                        status['cotracker3']['details'].append(f'⚠️ CoTracker3 hub access: {hub_e}')
             except Exception as e:
                 status['cotracker3']['details'].append(f'❌ CoTracker3 import error: {e}')
         else:
@@ -123,12 +133,13 @@ def check_engine_availability() -> Dict[str, Dict]:
         except ImportError:
             status['flowseek']['details'].append('⚠️ DPT depth models not available')
             
-        if TORCH_AVAILABLE:
+        if TORCH_AVAILABLE and torch is not None:
             try:
-                import torch.hub
-                # MiDaS depth models as fallback
-                status['flowseek']['details'].append('✅ MiDaS depth models available via torch.hub')
-                depth_available = True
+                if hasattr(torch, 'hub'):
+                    import torch.hub
+                    # MiDaS depth models as fallback
+                    status['flowseek']['details'].append('✅ MiDaS depth models available via torch.hub')
+                    depth_available = True
             except:
                 pass
             

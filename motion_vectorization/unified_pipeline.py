@@ -1958,3 +1958,26 @@ def create_balanced_pipeline(device: str = "auto") -> UnifiedMotionPipeline:
 def create_accuracy_pipeline(device: str = "auto") -> UnifiedMotionPipeline:
     """Create accuracy-optimized pipeline"""
     return create_unified_pipeline("accuracy", device)
+
+
+# Export UnifiedMotionVectorizationPipeline as an alias for compatibility
+UnifiedMotionVectorizationPipeline = UnifiedMotionPipeline
+
+
+# Export all public classes and functions
+__all__ = [
+    'UnifiedPipelineConfig',
+    'UnifiedMotionPipeline',
+    'UnifiedMotionVectorizationPipeline',  # Alias for compatibility
+    'SAM2Config',
+    'CoTracker3Config', 
+    'FlowSeekConfig',
+    'BridgeConfig',
+    'SAM2FlowSeekBridgeConfig',
+    'create_unified_pipeline',
+    'create_speed_pipeline',
+    'create_balanced_pipeline',
+    'create_accuracy_pipeline',
+    'TemporalConsistencyValidator',
+    'GPUMemoryManager'
+]

@@ -282,46 +282,56 @@ def main():
     if not os.path.exists(folder):
       os.makedirs(folder)
 
-  # Handle unified pipeline mode first - bypass legacy DataLoader validation
+  # Handle unified pipeline mode - use ACTUAL AI engines, not placeholders!
   if args.use_unified_pipeline:
-      print("🚀 Unified Pipeline Mode: Bypassing legacy DataLoader validation")
-      print("   Processing video with state-of-the-art engines on A100...")
+      print("🚀 Unified Pipeline Mode: Processing with SAM2.1 + CoTracker3 + FlowSeek")
+      print("   Using state-of-the-art AI engines for maximum accuracy...")
       
-      # For now, create minimal placeholder files to satisfy DataLoader
-      # This is a temporary solution while we develop the full unified pipeline integration
-      placeholder_dirs = [
-          os.path.join(video_dir, 'labels'),
-          os.path.join(video_dir, 'fgbg'), 
-          os.path.join(video_dir, 'comps'),
-          os.path.join(video_dir, 'flow', 'forward'),
-          os.path.join(video_dir, 'flow', 'backward')
-      ]
+      # Import and use the process_video module to actually process with AI engines
+      try:
+          from .process_video import MotionVectorizationProcessor, VideoProcessorConfig
+      except ImportError:
+          # If relative import fails, try absolute import
+          sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+          from motion_vectorization.process_video import MotionVectorizationProcessor, VideoProcessorConfig
       
-      # Get frame count and dimensions from rgb directory
-      rgb_files = sorted([f for f in os.listdir(os.path.join(video_dir, 'rgb')) if f.endswith('.png')])
+      # Configure the processor with unified pipeline settings
+      processor_config = VideoProcessorConfig(
+          video_file=args.video_file,
+          video_dir=args.video_dir,
+          output_dir=args.output_dir,
+          suffix=args.suffix,
+          max_frames=args.max_frames,
+          start_frame=args.start_frame,
+          device=args.unified_device if args.unified_device != 'auto' else ('cuda' if torch.cuda.is_available() else 'cpu'),
+          use_sam2=args.use_sam2,
+          use_cotracker3=args.use_cotracker3,
+          use_flowseek=args.use_flowseek,
+          quality_threshold=args.quality_threshold,
+          min_cluster_size=args.min_cluster_size,
+          min_density=args.min_density
+      )
       
-      # Read first frame to get actual dimensions
-      if rgb_files:
-          first_frame_path = os.path.join(video_dir, 'rgb', rgb_files[0])
-          first_frame = cv2.imread(first_frame_path)
-          if first_frame is not None:
-              frame_height, frame_width = first_frame.shape[:2]
-              print(f"   Detected frame dimensions: {frame_height}×{frame_width}")
-          else:
-              # Fallback dimensions if frame loading fails
-              frame_height, frame_width = 512, 840
-              print(f"   Using fallback dimensions: {frame_height}×{frame_width}")
-      else:
-          frame_height, frame_width = 512, 840
-          print(f"   Using default dimensions: {frame_height}×{frame_width}")
+      # Create processor and run the unified pipeline
+      print("\n🧠 Initializing AI engines...")
+      processor = MotionVectorizationProcessor(processor_config)
       
-      # Clean up any existing placeholder files first to ensure correct dimensions
-      print("   Cleaning up old placeholder files...")
-      for placeholder_dir in placeholder_dirs:
-          if os.path.exists(placeholder_dir):
-              for file in os.listdir(placeholder_dir):
-                  if file.endswith('.npy'):
-                      os.remove(os.path.join(placeholder_dir, file))
+      print("\n🎬 Processing video with AI engines...")
+      ai_results = processor.process_video()
+      
+      # The processor has already created all necessary files in the correct locations
+      # Check what was actually generated
+      print("\n📊 AI Processing Complete:")
+      if ai_results:
+          print(f"   ✅ Frames processed: {ai_results.get('frames', []).shape[0] if isinstance(ai_results.get('frames'), np.ndarray) else 0}")
+          if ai_results.get('segmentation'):
+              print(f"   ✅ SAM2 segmentation quality: {ai_results['segmentation'].get('quality_score', 0):.2%}")
+          if ai_results.get('tracking'):
+              print(f"   ✅ CoTracker3 tracking quality: {ai_results['tracking'].get('quality_score', 0):.2%}")
+          if ai_results.get('optical_flow'):
+              print(f"   ✅ FlowSeek optical flow: {len(ai_results['optical_flow'].get('forward', []))} frames")
+          if ai_results.get('shapes'):
+              print(f"   ✅ Shapes extracted: {ai_results['shapes'].get('total_shapes', 0)}")
                       
       for placeholder_dir in placeholder_dirs:
           os.makedirs(placeholder_dir, exist_ok=True)

@@ -907,7 +907,7 @@ def main():
               kx_init.append(kx0)
               ky_init.append(0)
               element_labels.append(shape_idx)
-              shape_crop = shape_crops.get(shape_idx) if shape_crops is not None else None
+              shape_crop = shape_crops.get(shape_idx) if isinstance(shape_crops, dict) else None
               if shape_crop is None:
                 continue
               elements.append(shape_crop)

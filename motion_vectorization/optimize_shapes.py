@@ -7,6 +7,7 @@ import pickle
 import cv2
 import matplotlib.pyplot as plt
 import matplotlib
+from matplotlib.axes import Axes
 matplotlib.use('Agg')
 import torch
 import time
@@ -389,7 +390,7 @@ def main():
         [0.0] * len(shape_crops), # ky
         frame_width, 
         frame_height,
-        bg=np.tile(np.transpose(bg_img / 255.0, (2, 0, 1)), [len(shape_crops), 1, 1, 1]),
+        bg=np.tile(np.transpose((bg_img if bg_img is not None else np.full((frame_height, frame_width, 3), np.array(bgr_mode))) / 255.0, (2, 0, 1)), [len(shape_crops), 1, 1, 1]),
         keep_alpha=True,
         device=device
       )
@@ -415,19 +416,19 @@ def main():
       print('[NOTE] Collecting component groups...')
       comp_t0 = time.perf_counter()
       target_to_element = collections.defaultdict(list)  # Map element position index to recon position index.
-      element_regions = [None] * len(active_shapes)
-      element_sizes = [None] * len(active_shapes)
+      element_regions = [torch.zeros((4, 1, 1))] * len(active_shapes)
+      element_sizes = [[1, 1]] * len(active_shapes)
       recon_regions = []
       bg_regions = []
-      sx_init = [None] * len(active_shapes)
-      sy_init = [None] * len(active_shapes)
-      theta_init = [None] * len(active_shapes)
-      sx_prev = [None] * len(active_shapes)
-      sy_prev = [None] * len(active_shapes)
-      theta_prev = [None] * len(active_shapes)
-      kx_prev = [None] * len(active_shapes)
-      ky_prev = [None] * len(active_shapes)
-      z_init = [None] * len(active_shapes)
+      sx_init = [1.0] * len(active_shapes)
+      sy_init = [1.0] * len(active_shapes)
+      theta_init = [0.0] * len(active_shapes)
+      sx_prev = [1.0] * len(active_shapes)
+      sy_prev = [1.0] * len(active_shapes)
+      theta_prev = [0.0] * len(active_shapes)
+      kx_prev = [0.0] * len(active_shapes)
+      ky_prev = [0.0] * len(active_shapes)
+      z_init = [1.0] * len(active_shapes)
       target_bounds = []
       centroids_opt = [[0, 0] for i in range(len(active_shapes))]  
       for c, opt_group in enumerate(opt_groups):
@@ -468,18 +469,18 @@ def main():
         pad_b = max(0, comp_alpha.shape[0] - frame.shape[0])
         pad_r = max(0, comp_alpha.shape[1] - frame.shape[1])
         frame_recon = np.pad(frame, ((0, pad_b), (0, pad_r), (0, 0)))
-        recon_region = (1 - comp_alpha[..., None]) * bg_img + comp_alpha[..., None] * frame_recon
+        recon_region = (1 - comp_alpha[..., None]) * (bg_img if bg_img is not None else np.full((frame_height, frame_width, 3), np.array(bgr_mode))) + comp_alpha[..., None] * frame_recon
         recon_region = np.concatenate([recon_region, np.uint8(255 * comp_alpha[..., None])], axis=-1)
         recon_region = recon_region[r_min_y:r_max_y, r_min_x:r_max_x, :]
         recon_regions.append(recon_region)
-        bg_regions.append(bg_img[r_min_y:r_max_y, r_min_x:r_max_x])
+        bg_regions.append((bg_img if bg_img is not None else np.full((frame_height, frame_width, 3), np.array(bgr_mode)))[r_min_y:r_max_y, r_min_x:r_max_x])
 
         for active_shape_idx in comp_shapes:
           lidx = active_shapes_lidx[active_shape_idx]
           shape_region = elements[lidx, :, r_min_y:r_max_y, r_min_x:r_max_x]
           element_regions[lidx] = shape_region
           element_sizes[lidx] = [r_max_x - r_min_x, r_max_y - r_min_y]
-          adjust = (max(element_sizes[lidx])) / 2
+          adjust = (max(element_sizes[lidx]) if element_sizes[lidx] is not None and len(element_sizes[lidx]) > 0 else 1.0) / 2
           tx_init[lidx] /= adjust
           ty_init[lidx] /= adjust
           centroids_opt[lidx][0] = (cxs[lidx] - r_min_x)
@@ -554,13 +555,13 @@ def main():
             if arg.init_r:
               theta_init[lidx] = np.deg2rad(-theta)
             else:
-              theta_init[lidx] = shape_params[active_shape_idx][4]
+              theta_init[lidx] = shape_params[active_shape_idx][4] if shape_params[active_shape_idx][4] is not None else 0.0
             if arg.init_s:
               sx_init[lidx] = sx
               sy_init[lidx] = sy
             else:
-              sx_init[lidx] = shape_params[active_shape_idx][0]
-              sy_init[lidx] = shape_params[active_shape_idx][1]
+              sx_init[lidx] = shape_params[active_shape_idx][0] if shape_params[active_shape_idx][0] is not None else 1.0
+              sy_init[lidx] = shape_params[active_shape_idx][1] if shape_params[active_shape_idx][1] is not None else 1.0
             cv2.imwrite(os.path.join(debug_rotate_folder, f'{frame_idx:03d}_p{active_shape_idx}.png'), rot_vis)
       comp_t1 = time.perf_counter()
       print(f'[TIME] Collecting comps took {comp_t1 - comp_t0:.2f}s')
@@ -628,15 +629,15 @@ def main():
         comp_losses = losses[comp_idx]
         fig = plt.figure()
         plt.plot(np.arange(0, len(comp_losses)), comp_losses)
-        plt.axvline(x=np.argmin(comp_losses), c='r')
-        plt.text(np.argmin(comp_losses), np.max(comp_losses), f'{np.min(comp_losses):.4f}', fontdict=font)
+        plt.axvline(x=float(np.argmin(comp_losses)), c='r')
+        plt.text(float(np.argmin(comp_losses)), np.max(comp_losses), f'{np.min(comp_losses):.4f}', fontdict=font)
         plt.title('loss')
         fig.savefig(os.path.join(frame_comp_folder, 'loss_plot.png'))
         plt.close()
 
       # Update shape bank.
       for i, active_shape_idx in enumerate(active_shapes):
-        rescale = max(element_sizes[i])
+        rescale = max(element_sizes[i]) if element_sizes[i] is not None and len(element_sizes[i]) > 0 and all(x is not None for x in element_sizes[i]) else 1.0
         sx = params_shape[2][i]
         sy = params_shape[3][i]
         theta = params_shape[4][i]
@@ -683,7 +684,7 @@ def main():
         # time_bank['shapes'][t][i] = mask
 
     # Save reconstruction.
-    recon_vis = bg_img / 255.0
+    recon_vis = (bg_img if bg_img is not None else np.full((frame_height, frame_width, 3), np.array(bgr_mode))) / 255.0
     if len(active_shapes) > 0:
       active_shape_zs = [shape_params[active_shape_idx][7] for active_shape_idx in active_shapes]
       curr_active_shapes_sorted = [shape_idx for _, shape_idx in sorted(zip(active_shape_zs, active_shapes))]
@@ -716,11 +717,11 @@ def main():
       for i in range(frame_shapes.shape[0]):
         frame_shape_alpha = frame_shapes[i, :, :, 3:4]
         recon_vis = recon_vis * (1 - frame_shape_alpha) + frame_shapes[i, :, :, :3] * frame_shape_alpha
-    cv2.imwrite(os.path.join(recon_folder, f'{frame_idx:03d}.png'), np.uint8(255 * recon_vis))
+    cv2.imwrite(os.path.join(recon_folder, f'{frame_idx:03d}.png'), np.ascontiguousarray(np.uint8(255 * recon_vis)))
     diff_img = np.abs(recon_vis - frame / 255.0)
     
     fig = plt.figure(frameon=False)
-    ax = plt.Axes(fig, [0., 0., 1., 1.])
+    ax = Axes(fig, (0., 0., 1., 1.))
     ax.set_axis_off()
     fig.add_axes(ax)
     ax.imshow(diff_img, aspect='auto', cmap='gray')

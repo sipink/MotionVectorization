@@ -139,10 +139,35 @@ class CoTracker3TrackerEngine:
     
     def _load_cotracker3_model(self):
         """Load CoTracker3 model via torch.hub with robust error handling"""
-        print("📦 Loading CoTracker3 model from torch.hub...")
+        print("📦 Loading CoTracker3 model...")
         
+        # First try loading from local checkpoint if available
+        checkpoint_path = "models/cotracker3_offline.pth"
+        if os.path.exists(checkpoint_path):
+            try:
+                print(f"   Loading from local checkpoint: {checkpoint_path}")
+                import cotracker
+                # Load model architecture
+                self.model = torch.hub.load(
+                    "facebookresearch/co-tracker", 
+                    self.config.model_variant,
+                    pretrained=False,  # Don't download weights
+                    trust_repo=True
+                )
+                # Load checkpoint weights
+                checkpoint = torch.load(checkpoint_path, map_location=self.device)
+                if 'model_state_dict' in checkpoint:
+                    self.model.load_state_dict(checkpoint['model_state_dict'])
+                else:
+                    self.model.load_state_dict(checkpoint)
+                print(f"✅ CoTracker3 loaded from local checkpoint")
+                return
+            except Exception as e:
+                print(f"⚠️ Local checkpoint loading failed: {e}")
+        
+        # Fall back to torch.hub download
         try:
-            # Load model with proper configuration
+            print("   Loading from torch.hub...")
             self.model = torch.hub.load(
                 "facebookresearch/co-tracker", 
                 self.config.model_variant,

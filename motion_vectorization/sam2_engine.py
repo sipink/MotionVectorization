@@ -13,10 +13,20 @@ from dataclasses import dataclass
 from collections import defaultdict
 import time
 
-# SAM2 is not currently installed in this environment
-# Using fallback implementation with proper type definitions
-SAM2_AVAILABLE = False
-warnings.warn("SAM2.1 not available. Using fallback implementation.")
+# Check if SAM2 is available
+try:
+    from sam2.build_sam import build_sam2_video_predictor
+    from sam2.sam2_video_predictor import SAM2VideoPredictor
+    SAM2_AVAILABLE = True
+    print("✅ SAM2.1 engine loaded successfully")
+except ImportError:
+    try:
+        import sam2
+        SAM2_AVAILABLE = True
+        print("✅ SAM2 module found")
+    except ImportError:
+        SAM2_AVAILABLE = False
+        warnings.warn("SAM2.1 not available. Using fallback implementation.")
 
 # Define typed dummies to prevent unbound variable errors
 def build_sam2_video_predictor(*args, **kwargs) -> Any:

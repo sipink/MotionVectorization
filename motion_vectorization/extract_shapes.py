@@ -11,7 +11,7 @@ import datetime
 import collections
 import matplotlib.pyplot as plt
 import matplotlib as mpl
-from typing import Dict, Any, Optional, Tuple, List
+from typing import Dict, Any
 mpl.use('Agg')
 from skimage.transform import AffineTransform
 from skimage.measure import ransac
@@ -21,7 +21,15 @@ from scipy import stats
 from .dataloader import DataLoader
 from .processor import Processor
 from .visualizer import Visualizer
-from .utils import *
+from .utils import (
+    get_comp_label_map, get_shape_coords, get_shape_centroid, get_shape_mask,
+    get_alpha, save_frames, compute_clusters_floodfill, clean_labels,
+    is_valid_cluster, blank_bg, shape_at_border, get_shape,
+    get_active_shapes, compute_transforms, propagate_labels, get_cmap,
+    pad_to_square, get_moment_features, init_rot_scale, optimize,
+    warp_flo, decompose, sigmoid, rotmax, params_to_mat, is_one_to_one,
+    place_mask
+)
 from . import compositing
 
 parser = argparse.ArgumentParser()

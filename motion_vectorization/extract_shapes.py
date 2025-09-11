@@ -376,7 +376,7 @@ def main():
   shape_bank = {-1: []}
   optim_bank = {-1: []}
   # Base frame info
-  base_bank = None
+  base_bank = {-1: []}
   base_fg_labels = None
   base_frame = None 
   base_fg_comps = None
@@ -408,7 +408,7 @@ def main():
     if t < args.start_frame:
       continue
     if t == args.base_frame + 1:
-      optim_bank = base_bank
+      optim_bank = copy.deepcopy(base_bank) if isinstance(base_bank, dict) else {-1: []}
       prev_fg_labels = base_fg_labels
       prev_fg_comps = base_fg_comps
       prev_fg_comp_to_label = base_fg_comp_to_label

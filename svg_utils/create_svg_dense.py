@@ -368,7 +368,7 @@ def main():
     for g in gs:
         d.append(g)
         
-    d.saveSvg(output_path)
+    d.save_svg(output_path)
 
 
 if __name__ == '__main__':

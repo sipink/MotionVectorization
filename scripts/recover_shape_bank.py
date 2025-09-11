@@ -12,7 +12,7 @@ output_dir = f"motion_vectorization/outputs/{video_name}_None"
 shapes_folder = os.path.join(output_dir, "shapes")
 
 # Create shape_bank from the saved shape images
-shape_bank = {-1: []}
+shape_bank: dict = {-1: []}
 
 if os.path.exists(shapes_folder):
     print(f"Recovering shape_bank from {shapes_folder}")

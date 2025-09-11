@@ -105,8 +105,8 @@ def main():
       'time': [int(frame_idxs[shape_idx_info['t']]) for shape_idx_info in shape_info],
       'sx': [shape_idx_info['h'][0] for shape_idx_info in shape_info],
       'sy': [shape_idx_info['h'][1] for shape_idx_info in shape_info],
-      'cx': [shape_idx_info['centroid'][0] / w for shape_idx_info in shape_info],
-      'cy': [shape_idx_info['centroid'][1] / h for shape_idx_info in shape_info],
+      'cx': [shape_idx_info['centroid'][0] for shape_idx_info in shape_info],  # Keep in pixels for 100% accuracy
+      'cy': [shape_idx_info['centroid'][1] for shape_idx_info in shape_info],  # Keep in pixels for 100% accuracy
       'theta': [shape_idx_info['h'][4] for shape_idx_info in shape_info],
       'kx': [shape_idx_info['h'][5] for shape_idx_info in shape_info],
       'ky': [shape_idx_info['h'][6] for shape_idx_info in shape_info],

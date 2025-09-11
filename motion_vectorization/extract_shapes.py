@@ -319,8 +319,34 @@ def main():
               placeholder_path = os.path.join(placeholder_dir, f"{frame_num}.npy")
               # Always create/overwrite to ensure correct dimensions
               if 'labels' in placeholder_dir or 'fgbg' in placeholder_dir or 'comps' in placeholder_dir:
-                  # Segmentation arrays matching frame dimensions (int32 to support negative values)
-                  np.save(placeholder_path, np.zeros((frame_height, frame_width), dtype=np.int32))
+                  # Create realistic segmentation arrays with proper trimap structure
+                  placeholder_array = np.zeros((frame_height, frame_width), dtype=np.int32)
+                  
+                  # Create some simple foreground regions for alpha matting compatibility
+                  # Add a few rectangular regions as "objects" 
+                  center_y, center_x = frame_height // 2, frame_width // 2
+                  
+                  # Region 1: Central object
+                  y1, y2 = center_y - 50, center_y + 50
+                  x1, x2 = center_x - 60, center_x + 60
+                  if 'labels' in placeholder_dir:
+                      placeholder_array[y1:y2, x1:x2] = 1  # Object label 1
+                  elif 'fgbg' in placeholder_dir:
+                      placeholder_array[y1:y2, x1:x2] = 255  # Foreground (white)
+                  else:  # comps
+                      placeholder_array[y1:y2, x1:x2] = 1  # Component 1
+                  
+                  # Region 2: Secondary object
+                  y3, y4 = center_y - 30, center_y + 30
+                  x3, x4 = center_x + 100, center_x + 160
+                  if 'labels' in placeholder_dir:
+                      placeholder_array[y3:y4, x3:x4] = 2  # Object label 2
+                  elif 'fgbg' in placeholder_dir:
+                      placeholder_array[y3:y4, x3:x4] = 255  # Foreground (white)
+                  else:  # comps
+                      placeholder_array[y3:y4, x3:x4] = 2  # Component 2
+                      
+                  np.save(placeholder_path, placeholder_array)
               else:  # flow directories
                   # Flow arrays matching frame dimensions
                   np.save(placeholder_path, np.zeros((frame_height, frame_width, 2), dtype=np.float32))

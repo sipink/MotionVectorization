@@ -15,13 +15,13 @@ import time
 
 # Check if SAM2 is available
 try:
-    from sam2.build_sam import build_sam2_video_predictor
-    from sam2.sam2_video_predictor import SAM2VideoPredictor
+    from sam2.build_sam import build_sam2_video_predictor  # type: ignore[import-untyped]
+    from sam2.sam2_video_predictor import SAM2VideoPredictor  # type: ignore[import-untyped]
     SAM2_AVAILABLE = True
     print("✅ SAM2.1 engine loaded successfully")
 except ImportError:
     try:
-        import sam2
+        import sam2  # type: ignore[import-untyped]
         SAM2_AVAILABLE = True
         print("✅ SAM2 module found")
     except ImportError:
@@ -596,14 +596,14 @@ def convert_to_clusters(
     
     # Create visualization (compatible with existing visualizer)
     try:
-        from .visualizer import Visualizer
-        viz = Visualizer()
-        labels_vis = viz.show_labels(final_labels)
+        from .visualizer import Visualizer  # type: ignore[import-untyped]
+        visualizer = Visualizer()
+        labels_vis = visualizer.show_labels(final_labels)
         # Ensure labels_vis is ndarray
         if not isinstance(labels_vis, np.ndarray):
             labels_vis = np.array(labels_vis, dtype=np.uint8)
-    except Exception as e:
-        print(f"⚠️ Visualization failed: {e}, using dummy output")
+    except (ImportError, Exception) as exception:
+        print(f"⚠️ Visualization failed: {exception}, using dummy output")
         labels_vis = np.zeros_like(final_labels, dtype=np.uint8)
     
     return final_labels - 1, labels_vis  # Subtract 1 to match existing format

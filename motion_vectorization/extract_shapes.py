@@ -319,8 +319,8 @@ def main():
               placeholder_path = os.path.join(placeholder_dir, f"{frame_num}.npy")
               # Always create/overwrite to ensure correct dimensions
               if 'labels' in placeholder_dir or 'fgbg' in placeholder_dir or 'comps' in placeholder_dir:
-                  # Segmentation arrays matching frame dimensions
-                  np.save(placeholder_path, np.zeros((frame_height, frame_width), dtype=np.uint8))
+                  # Segmentation arrays matching frame dimensions (int32 to support negative values)
+                  np.save(placeholder_path, np.zeros((frame_height, frame_width), dtype=np.int32))
               else:  # flow directories
                   # Flow arrays matching frame dimensions
                   np.save(placeholder_path, np.zeros((frame_height, frame_width, 2), dtype=np.float32))

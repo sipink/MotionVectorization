@@ -95,10 +95,10 @@ class UnifiedPipelineConfig:
     quality_threshold: float = 0.9
     
     # Engine-specific configurations (will be created if engines are available)
-    sam2_config: Optional[SAM2Config] = None
-    cotracker3_config: Optional[CoTracker3Config] = None
-    flowseek_config: Optional[FlowSeekConfig] = None
-    bridge_config: Optional[BridgeConfig] = None
+    sam2_config: Optional[Any] = None  # SAM2Config when available
+    cotracker3_config: Optional[Any] = None  # CoTracker3Config when available
+    flowseek_config: Optional[Any] = None  # FlowSeekConfig when available
+    bridge_config: Optional[Any] = None  # BridgeConfig when available
     
     # Engine availability and fallback settings
     require_sam2: bool = False  # If True, fail if SAM2 not available
@@ -283,7 +283,7 @@ class UnifiedMotionPipeline:
                     if engine_key == 'flowseek':
                         from .flowseek_engine import create_flowseek_engine
                         engine = create_flowseek_engine(
-                            config=config, device=self.device, mixed_precision=self.config.mixed_precision
+                            config=config, device=str(self.device), mixed_precision=self.config.mixed_precision
                         )
                     else:
                         engine = engine_class(config)
@@ -373,7 +373,7 @@ class UnifiedMotionPipeline:
     def process_video(
         self,
         video_path: str,
-        output_dir: str = None,
+        output_dir: Optional[str] = None,
         max_frames: int = -1,
         start_frame: int = 0,
         save_visualizations: bool = True
@@ -657,9 +657,11 @@ class UnifiedMotionPipeline:
         
         try:
             # SAM2.1 video segmentation
-            masks, metadata = self.sam2_engine.segment_video_batch(
-                [frame1, frame2], [0, 1]
-            )
+            result = self.sam2_engine.segment_video_batch([frame1, frame2], [0, 1])
+            if isinstance(result, tuple) and len(result) == 2:
+                masks, metadata = result
+            else:
+                masks, metadata = result, {}
             
             return {
                 'status': 'success',
@@ -668,8 +670,7 @@ class UnifiedMotionPipeline:
                 'quality_score': metadata.get('average_quality', 0.0)
             }
             
-        except Exception:
-            pass
+        except Exception as e:
             return {'status': 'failed', 'error': str(e), 'masks': None}
             
     def _process_tracking(
@@ -695,12 +696,18 @@ class UnifiedMotionPipeline:
             
             # CoTracker3 tracking
             if query_points is not None:
-                tracks, visibility = self.cotracker3_engine.track_video_grid(
-                    video_tensor, custom_points=query_points
-                )
+                result = self.cotracker3_engine.track_video_grid(video_tensor, custom_points=query_points)
+                if isinstance(result, tuple) and len(result) == 2:
+                    tracks, visibility = result
+                else:
+                    tracks, visibility = result, None
             else:
                 # Use grid-based tracking
-                tracks, visibility = self.cotracker3_engine.track_video_grid(video_tensor)
+                result = self.cotracker3_engine.track_video_grid(video_tensor)
+                if isinstance(result, tuple) and len(result) == 2:
+                    tracks, visibility = result
+                else:
+                    tracks, visibility = result, None
                 
             # Extract motion parameters from tracking
             motion_params = self.cotracker3_engine.extract_motion_parameters(
@@ -715,8 +722,7 @@ class UnifiedMotionPipeline:
                 'quality_score': self._calculate_tracking_quality(tracks, visibility)
             }
             
-        except Exception:
-            pass
+        except Exception as e:
             return {'status': 'failed', 'error': str(e), 'tracks': None}
             
     def _process_optical_flow(
@@ -736,9 +742,19 @@ class UnifiedMotionPipeline:
                 masks1 = segmentation_results.get('masks', [None, None])[0]
                 masks2 = segmentation_results.get('masks', [None, None])[1] if len(segmentation_results.get('masks', [])) > 1 else None
                 
-                forward_flow, backward_flow, metadata = self.sam2_flowseek_bridge.process_frame_pair(
-                    frame1, frame2, masks1, masks2
-                )
+                # Handle bridge result safely
+                if hasattr(self.sam2_flowseek_bridge, 'process_frame_pair'):
+                    bridge_result = self.sam2_flowseek_bridge.process_frame_pair(frame1, frame2, masks1, masks2)
+                    if isinstance(bridge_result, tuple) and len(bridge_result) == 3:
+                        forward_flow, backward_flow, metadata = bridge_result
+                    elif isinstance(bridge_result, tuple) and len(bridge_result) == 2:
+                        forward_flow, backward_flow = bridge_result
+                        metadata = {}
+                    else:
+                        forward_flow, backward_flow, metadata = None, None, {}
+                else:
+                    # Fallback if method doesn't exist
+                    forward_flow, backward_flow, metadata = None, None, {}
                 
                 return {
                     'status': 'success',
@@ -753,8 +769,12 @@ class UnifiedMotionPipeline:
                 rgb2_tensor = self._prepare_image_tensor(frame2)
                 
                 # FlowSeek forward pass
-                _, forward_flow_tensor = self.flowseek_engine(rgb1_tensor, rgb2_tensor, test_mode=True)
-                _, backward_flow_tensor = self.flowseek_engine(rgb2_tensor, rgb1_tensor, test_mode=True)
+                forward_result = self.flowseek_engine(rgb1_tensor, rgb2_tensor, test_mode=True)
+                backward_result = self.flowseek_engine(rgb2_tensor, rgb1_tensor, test_mode=True)
+                
+                # Handle result unpacking safely
+                forward_flow_tensor = forward_result[1] if isinstance(forward_result, tuple) and len(forward_result) > 1 else forward_result
+                backward_flow_tensor = backward_result[1] if isinstance(backward_result, tuple) and len(backward_result) > 1 else backward_result
                 
                 # Convert to numpy
                 forward_flow = forward_flow_tensor[0].permute(1, 2, 0).cpu().numpy()
@@ -767,8 +787,7 @@ class UnifiedMotionPipeline:
                     'quality_score': self._calculate_flow_quality(forward_flow, backward_flow)
                 }
                 
-        except Exception:
-            pass
+        except Exception as e:
             return {'status': 'failed', 'error': str(e), 'flow': None}
             
     def _extract_motion_parameters(

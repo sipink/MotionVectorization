@@ -21,6 +21,7 @@ from scipy import stats
 from .dataloader import DataLoader
 from .processor import Processor
 from .visualizer import Visualizer
+from .engine_status import verify_engines_at_startup, ensure_maximum_accuracy
 from .utils import (
     get_comp_label_map, get_shape_coords, get_shape_centroid, get_shape_mask,
     get_alpha, save_frames, compute_clusters_floodfill, clean_labels,
@@ -52,7 +53,7 @@ parser.add_argument(
 
 # Video processing.
 parser.add_argument(
-  '--max_frames', default=-1, type=int, 
+  '--max_frames', default=200, type=int, 
   help='The maximum number of frames to process. If set to -1, then process all frames.')
 parser.add_argument(
   '--start_frame', default=1, type=int, 
@@ -106,10 +107,10 @@ parser.add_argument(
 
 # Unified Pipeline Integration (SAM2.1 + CoTracker3 + FlowSeek)
 parser.add_argument(
-  '--use_unified_pipeline', action='store_true', default=False,
+  '--use_unified_pipeline', action='store_true', default=True,
   help='Use unified SAM2.1 + CoTracker3 + FlowSeek pipeline for maximum accuracy and speed.')
 parser.add_argument(
-  '--unified_mode', type=str, default='balanced', choices=['speed', 'balanced', 'accuracy'],
+  '--unified_mode', type=str, default='accuracy', choices=['speed', 'balanced', 'accuracy'],
   help='Unified pipeline mode: speed (60 FPS), balanced (44 FPS), accuracy (30 FPS with 95%+ quality).')
 parser.add_argument(
   '--unified_device', type=str, default='auto', choices=['auto', 'cuda', 'cpu'],
@@ -118,7 +119,7 @@ parser.add_argument(
   '--progressive_fallback', action='store_true', default=True,
   help='Enable progressive fallback: Unified → Individual engines → Legacy methods.')
 parser.add_argument(
-  '--quality_threshold', type=float, default=0.85,
+  '--quality_threshold', type=float, default=0.95,
   help='Minimum quality threshold to accept unified pipeline results.')
 parser.add_argument(
   '--benchmark_performance', action='store_true', default=False,
@@ -126,7 +127,7 @@ parser.add_argument(
 
 # CoTracker3 integration (maintained for individual engine support)
 parser.add_argument(
-  '--use_cotracker3', action='store_true', default=False,
+  '--use_cotracker3', action='store_true', default=True,
   help='Use CoTracker3 for superior point tracking instead of primitive shape matching.')
 parser.add_argument(
   '--cotracker3_mode', type=str, default='offline', choices=['offline', 'online'],
@@ -140,7 +141,7 @@ parser.add_argument(
 
 # SAM2.1 individual engine support
 parser.add_argument(
-  '--use_sam2', action='store_true', default=False,
+  '--use_sam2', action='store_true', default=True,
   help='Use SAM2.1 for superior segmentation accuracy.')
 parser.add_argument(
   '--sam2_model', type=str, default='large', choices=['small', 'large'],
@@ -148,7 +149,7 @@ parser.add_argument(
 
 # FlowSeek individual engine support
 parser.add_argument(
-  '--use_flowseek', action='store_true', default=False,
+  '--use_flowseek', action='store_true', default=True,
   help='Use FlowSeek for superior optical flow accuracy with 8x less hardware.')
 parser.add_argument(
   '--flowseek_depth_integration', action='store_true', default=True,
@@ -171,7 +172,7 @@ parser.add_argument(
   '--n_steps', default=50, type=int, 
   help='Number of steps to optimize for individual shape matching.')
 parser.add_argument(
-  '--use_gpu', action='store_true', default=False, 
+  '--use_gpu', action='store_true', default=True, 
   help='Use GPU')
 parser.add_argument(
   '--bleed', default=50, type=int, 
@@ -209,6 +210,17 @@ parser.add_argument(
 d = datetime.date.today().strftime("%d%m%y")
 now = datetime.datetime.now()
 print('TIME:', now)
+
+# Verify AI engines at startup
+print("\n🔍 Verifying AI engines...")
+engine_status = verify_engines_at_startup(verbose=True)
+max_accuracy = ensure_maximum_accuracy()
+if not max_accuracy:
+    print("\n⚠️  WARNING: System not configured for maximum accuracy!")
+    print("   Some AI engines are missing or not properly configured.")
+    print("   The system will still run but with reduced accuracy.\n")
+else:
+    print("\n✅ MAXIMUM ACCURACY MODE ENABLED - All AI engines operational!\n")
 
 args = parser.parse_args()
 video_name = os.path.splitext(args.video_file.split('/')[-1])[0]

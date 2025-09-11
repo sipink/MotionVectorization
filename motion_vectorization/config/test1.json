@@ -36,7 +36,7 @@
     "n_steps": 50,
     "p_weight": 0.01,
     "blur_kernel": 3,
-    "use_gpu": false,
+    "use_gpu": true,
     "bleed": 50,
     "use_k": true,
     "use_r": true,
@@ -50,6 +50,18 @@
     "scale_thresh": 0.03,
     "angle_thresh": 0.0,
   
-    "verbose": true
-  }
-  
+    "verbose": true,
+
+    "use_unified_pipeline": true,
+    "unified_mode": "balanced",
+    "unified_device": "auto",
+    "progressive_fallback": true,
+    "quality_threshold": 0.85,
+    "use_cotracker3": true,
+    "cotracker3_mode": "offline",
+    "cotracker3_grid_size": 40,
+    "use_sam2": true,
+    "sam2_model": "large",
+    "use_flowseek": true,
+    "flowseek_depth_integration": true
+}

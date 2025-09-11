@@ -667,7 +667,8 @@ class FlowSeekEngine(nn.Module):
                         )
                         if self.depth_estimator is not None:
                             self.depth_estimator.eval()
-                            self.depth_estimator.to(self.device)
+                            if hasattr(self.depth_estimator, 'to'):
+                                self.depth_estimator.to(self.device)
                         print(f"✅ Loaded DPT depth model: {model_name}")
                         return
                     except Exception as dpt_e:
@@ -679,7 +680,7 @@ class FlowSeekEngine(nn.Module):
                     "intel-isl/MiDaS", model_name, trust_repo=True, force_reload=False
                 )
                 self.depth_estimator.eval()
-                self.depth_estimator.to(self.device)
+                self.depth_estimator = self.depth_estimator.to(self.device)
                 
                 # Apply optimizations if on CUDA
                 if self.config.mixed_precision and self.device.type == "cuda":
@@ -877,6 +878,7 @@ class FlowSeekEngine(nn.Module):
             
         # Iterative flow updates with motion basis integration
         flow_predictions = []
+        flow_up = coords1 - coords0  # Initialize to avoid unbound variable
         
         for itr in range(iters):
             coords1 = coords1.detach()
@@ -903,8 +905,8 @@ class FlowSeekEngine(nn.Module):
             coords1 = coords1 + delta_flow
             
             # Upsample flow to original resolution
-            target_shape = tuple(image1.shape[2:])  # Convert Size to tuple
-            flow_up = self._upsample_flow(coords1 - coords0, target_shape)
+            target_size: Tuple[int, int] = (image1.shape[2], image1.shape[3])  # Explicit 2-tuple
+            flow_up = self._upsample_flow(coords1 - coords0, target_size)
             flow_predictions.append(flow_up)
             
         if test_mode:
@@ -955,8 +957,8 @@ class FlowSeekEngine(nn.Module):
                 )
                 
             coords1 = coords1 + delta_flow
-            target_shape = tuple(image1.shape[2:])  # Convert Size to tuple
-            flow_up = self._upsample_flow(coords1 - coords0, target_shape)
+            target_size: Tuple[int, int] = (image1.shape[2], image1.shape[3])  # Explicit 2-tuple
+            flow_up = self._upsample_flow(coords1 - coords0, target_size)
             flow_predictions.append(flow_up)
             
         if test_mode:
@@ -1006,7 +1008,7 @@ def create_flowseek_engine(
     mixed_precision: bool = True,
     compile_model: bool = True,
     **kwargs
-) -> FlowSeekEngine:
+) -> Union[FlowSeekEngine, Any]:  # Handle compiled model case
     """
     Factory function to create optimized FlowSeek engine
     

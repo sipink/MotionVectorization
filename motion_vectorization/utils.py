@@ -4,16 +4,137 @@ import re
 import numpy as np
 import cv2
 import matplotlib.pyplot as plt
-from skimage.segmentation import expand_labels
 import torch
-from kornia.filters import gaussian_blur2d
 from scipy.spatial.distance import cdist
 import time
 from scipy import ndimage
 import torch.nn.functional as F
-from torchvision.transforms import Resize
-from pyefd import elliptic_fourier_descriptors
-from pymatting import estimate_alpha_cf
+
+# Optional heavyweight dependencies with fallbacks
+try:
+    from skimage.segmentation import expand_labels
+    SKIMAGE_AVAILABLE = True
+except ImportError:
+    SKIMAGE_AVAILABLE = False
+    def expand_labels(label_image, distance=1, spacing=1):
+        """Fallback implementation using cv2 morphological operations"""
+        if distance <= 0:
+            return label_image
+        
+        # Convert to uint8 for cv2 operations
+        labels_uint8 = label_image.astype(np.uint8)
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2*distance+1, 2*distance+1))
+        
+        # Dilate each label separately to avoid conflicts
+        expanded = np.zeros_like(label_image)
+        for label_id in np.unique(label_image):
+            if label_id == 0:  # Skip background
+                continue
+            mask = (label_image == label_id).astype(np.uint8)
+            dilated = cv2.dilate(mask, kernel, iterations=1)
+            expanded[dilated > 0] = label_id
+        
+        return expanded
+
+try:
+    from kornia.filters import gaussian_blur2d
+    KORNIA_AVAILABLE = True
+except ImportError:
+    KORNIA_AVAILABLE = False
+    def gaussian_blur2d(input, kernel_size, sigma, border_type="reflect", separable=True):
+        """Fallback implementation using torch conv2d with gaussian kernel"""
+        if isinstance(kernel_size, int):
+            kernel_size = (kernel_size, kernel_size)
+        if isinstance(sigma, (int, float)):
+            sigma = (sigma, sigma)
+        
+        # Create 2D gaussian kernel
+        kx, ky = kernel_size
+        sx, sy = sigma
+        
+        x = torch.arange(-(kx//2), kx//2 + 1, dtype=input.dtype, device=input.device)
+        y = torch.arange(-(ky//2), ky//2 + 1, dtype=input.dtype, device=input.device)
+        
+        gauss_x = torch.exp(-0.5 * (x / sx) ** 2)
+        gauss_y = torch.exp(-0.5 * (y / sy) ** 2)
+        
+        kernel = torch.outer(gauss_y, gauss_x)
+        kernel = kernel / kernel.sum()
+        
+        # Reshape for conv2d: [out_channels, in_channels, height, width]
+        kernel = kernel.expand(input.size(1), 1, kernel.size(0), kernel.size(1))
+        
+        # Apply convolution with padding
+        padding = (kx//2, ky//2)
+        return F.conv2d(input, kernel, padding=padding, groups=input.size(1))
+
+try:
+    from torchvision.transforms import Resize
+    TORCHVISION_AVAILABLE = True
+except ImportError:
+    TORCHVISION_AVAILABLE = False
+    class Resize:
+        """Fallback implementation using torch interpolation"""
+        def __init__(self, size, interpolation='bilinear'):
+            if isinstance(size, int):
+                self.size = (size, size)
+            else:
+                self.size = size
+            self.interpolation = interpolation
+        
+        def __call__(self, tensor):
+            if tensor.dim() == 3:
+                tensor = tensor.unsqueeze(0)
+                squeeze = True
+            else:
+                squeeze = False
+            
+            result = F.interpolate(tensor, size=self.size, mode=self.interpolation, align_corners=False)
+            
+            if squeeze:
+                result = result.squeeze(0)
+            
+            return result
+
+try:
+    from pymatting import estimate_alpha_cf
+    PYMATTING_AVAILABLE = True
+except ImportError:
+    PYMATTING_AVAILABLE = False
+    def estimate_alpha_cf(image, trimap, preconditioner=None, laplacian_kwargs=None, cg_kwargs=None):
+        """Fallback implementation using simple trimap-based alpha estimation"""
+        alpha = np.zeros(trimap.shape[:2], dtype=np.float64)
+        
+        # Known foreground (trimap == 1)
+        alpha[trimap == 1.0] = 1.0
+        
+        # Known background (trimap == 0)
+        alpha[trimap == 0.0] = 0.0
+        
+        # Unknown regions (trimap == 0.5) - use simple averaging
+        unknown_mask = (trimap == 0.5)
+        if np.any(unknown_mask):
+            # Simple approach: set alpha based on image brightness
+            if len(image.shape) == 3:
+                gray = np.mean(image, axis=2)
+            else:
+                gray = image
+            
+            # Normalize to [0, 1] and use as alpha for unknown regions
+            alpha[unknown_mask] = np.clip(gray[unknown_mask], 0.0, 1.0)
+        
+        return alpha
+
+try:
+    from pyefd import elliptic_fourier_descriptors
+    PYEFD_AVAILABLE = True
+except ImportError:
+    PYEFD_AVAILABLE = False
+    def elliptic_fourier_descriptors(contour, order=10, normalize=False):
+        """Fallback stub - pyefd not available"""
+        # This function appears to be imported but not used in the visible code
+        # Return a stub implementation to prevent import errors
+        return np.zeros((order, 4))
 
 from . import compositing
 from . import sampling

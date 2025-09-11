@@ -73,7 +73,8 @@ except ImportError:
     SAM2CoTrackerBridge = SAM2FlowSeekBridge = _DummyEngine
     BridgeConfig = SAM2FlowSeekBridgeConfig = _DummyEngineConfig
 
-ENGINES_AVAILABLE = any(ENGINE_AVAILABILITY.values())
+# Only consider actual engines, not bridges, for availability
+ENGINES_AVAILABLE = any(ENGINE_AVAILABILITY[k] for k in ['sam2', 'cotracker3', 'flowseek'])
 
 
 @dataclass
@@ -271,7 +272,7 @@ class UnifiedMotionPipeline:
         engines = [
             ('sam2', SAM2SegmentationEngine, 'sam2_config'),
             ('cotracker3', CoTracker3TrackerEngine, 'cotracker3_config'),
-            ('flowseek', 'flowseek_special', 'flowseek_config')
+            ('flowseek', FlowSeekEngine, 'flowseek_config')
         ]
         
         for engine_key, engine_class, config_attr in engines:
@@ -301,6 +302,13 @@ class UnifiedMotionPipeline:
         """Setup cross-engine validation bridges"""
         if not self.config.enable_cross_validation:
             return
+        
+        # Guard against None configs to prevent type errors
+        if (self.config.sam2_config is None or 
+            self.config.cotracker3_config is None or 
+            self.config.flowseek_config is None):
+            return
+            
         try:
             self.sam2_cotracker_bridge = SAM2CoTrackerBridge(
                 sam2_config=self.config.sam2_config,

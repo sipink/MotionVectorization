@@ -1,4 +1,4 @@
-modules = ["nodejs-20", "bash", "cpp-clang14", "python-3.11"]
+modules = ["nodejs-20", "bash", "cpp-clang14", "python-3.11", "python3"]
 [agent]
 expertMode = true
 

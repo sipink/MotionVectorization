@@ -1,6 +1,6 @@
 import argparse
 import json
-import drawSvg as draw
+import drawsvg as draw
 import math
 import base64
 import cv2
@@ -9,11 +9,23 @@ import pickle
 import os
 import copy
 from PIL import Image as Img
+from PIL.Image import Resampling
 from io import BytesIO
 
-from adjust_aspect_ratio import *
 # from retime import *
-from svg_utils.utils import *
+try:
+    from svg_utils.utils import calc_animation_duration, append_to_transform_value_arr, generate_display_key_times
+except ImportError:
+    from utils import calc_animation_duration, append_to_transform_value_arr, generate_display_key_times
+
+# Stub functions for resize functionality (originally from adjust_aspect_ratio module)
+def group_shapes(motion_file, resize_file, d, gs):
+    """Stub function - resize functionality not fully implemented"""
+    return [], []
+
+def resize_aspect_raio(motion_file, resize_file, d, svg_groups, group_nums, size):
+    """Stub function - resize functionality not fully implemented"""
+    pass
 
 
 class Image(draw.DrawingParentElement):
@@ -41,8 +53,16 @@ parser.add_argument(
     '--resize', type=int,
     help='Whether to resize the svg given a resize.json file.'
 )
-    
-arg = parser.parse_args()
+
+# Only parse arguments when run as main script
+if __name__ == '__main__':
+    arg = parser.parse_args()
+else:
+    # Create a dummy args object for when imported as module
+    class DummyArgs:
+        video_dir = None
+        resize = None
+    arg = DummyArgs()
 frame_rate = 60
 
 
@@ -78,7 +98,9 @@ def create_svg(motion_file, frame_height, frame_width):
         if i == '-1':
             continue
         curr_shape = motion_file[str(i)]
-        shape_file_path = os.path.join(arg.video_dir, 'shapes', str(i) +'.png')
+        if arg.video_dir is None:
+            raise ValueError("video_dir must be specified")
+        shape_file_path = os.path.join(arg.video_dir, 'shapes', str(i) + '.png')
         
         # im = cv2.imread(shape_file_path)
         # height = im.shape[0]
@@ -91,7 +113,7 @@ def create_svg(motion_file, frame_height, frame_width):
         if 'canonical' in curr_shape:
             sx, sy, theta = curr_shape['canonical'][0]
             im = im.resize((int(width * sx), int(height * sy)))
-            im = im.rotate(np.rad2deg(theta), Img.BILINEAR, expand=0)
+            im = im.rotate(np.rad2deg(theta), Resampling.BILINEAR, expand=0)
         # cv2.imshow('im_after', cv2.cvtColor(np.array(im), cv2.COLOR_RGB2BGR))
         # cv2.waitKey(0)
 
@@ -103,7 +125,7 @@ def create_svg(motion_file, frame_height, frame_width):
         encoded_string = base64.b64encode(buf.getvalue())
 
         image = Image('data:image/png;base64,' + encoded_string.decode('utf-8'), width=width,
-                      height=height, x=-width/2, y=-height/2)
+                      height=height, x=int(-width/2), y=int(-height/2))
 
         # adding animation attributes
         shape_animation_duration = curr_shape['time'][-1] - curr_shape['time'][0] + 1
@@ -162,7 +184,7 @@ def create_svg(motion_file, frame_height, frame_width):
         # display
         key_value, key_times = generate_display_key_times(start_delay, shape_animation_duration, animation_duration, frame_rate)
         
-        image.appendAnim(draw.Animate(
+        image.appendAnim(draw.Animate(  # type: ignore
             'display',
             str(animation_duration_s) + "s",
             ";".join(key_value),
@@ -233,6 +255,8 @@ def main():
 
     # Load in computed template info.
     # motion_file = json.load(open(arg.motion_file, 'rb'))
+    if arg.video_dir is None:
+        raise ValueError("video_dir must be specified")
     motion_file = json.load(
         open(os.path.join(arg.video_dir, 'motion_file_full.json'), 'rb'))
 

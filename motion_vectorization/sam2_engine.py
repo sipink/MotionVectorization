@@ -7,7 +7,7 @@ import os
 import torch
 import numpy as np
 import cv2
-from typing import Dict, List, Tuple, Optional, Union
+from typing import Dict, List, Tuple, Optional, Union, Any
 import warnings
 from dataclasses import dataclass
 from collections import defaultdict
@@ -22,6 +22,15 @@ except ImportError:
     # Fallback implementation if SAM2 not available
     SAM2_AVAILABLE = False
     warnings.warn("SAM2.1 not available. Using fallback implementation.")
+    
+    # Define typed dummies to prevent unbound variable errors
+    def build_sam2_video_predictor(*args, **kwargs) -> Any:
+        raise RuntimeError("SAM2 not available")
+    
+    class SAM2ImagePredictor:
+        @classmethod
+        def from_pretrained(cls, *args, **kwargs) -> Any:
+            raise RuntimeError("SAM2 not available")
 
 
 @dataclass
@@ -30,13 +39,28 @@ class SAM2Config:
     model_cfg: str = "sam2_hiera_l.yaml"  # Large model for max accuracy
     sam2_checkpoint: str = "sam2_hiera_large.pt"
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
-    mixed_precision: bool = True
+    mixed_precision: bool = True  # Will be automatically disabled on CPU
     vos_optimized: bool = True  # Video Object Segmentation optimization
-    compile_model: bool = True  # torch.compile for speedup
+    compile_model: bool = True  # Will be automatically disabled on CPU
     max_obj_ptrs_in_encoder: int = 16
     batch_size: int = 4
     target_fps: float = 44.0
     accuracy_threshold: float = 0.95
+    
+    def __post_init__(self):
+        """Auto-adjust settings based on device capabilities"""
+        cuda_available = torch.cuda.is_available()
+        
+        # Disable CUDA-specific features on CPU
+        if self.device == "cpu" or not cuda_available:
+            self.mixed_precision = False
+            self.compile_model = False
+            if not cuda_available:
+                self.device = "cpu"
+                
+        # Adjust batch size for CPU
+        if self.device == "cpu":
+            self.batch_size = min(self.batch_size, 2)  # Reduce batch size for CPU
 
 
 class SAM2SegmentationEngine:
@@ -47,9 +71,9 @@ class SAM2SegmentationEngine:
     
     def __init__(self, config: Optional[SAM2Config] = None):
         self.config = config or SAM2Config()
-        self.predictor = None
-        self.image_predictor = None
-        self.inference_state = None
+        self.predictor: Optional[Any] = None
+        self.image_predictor: Optional[Any] = None
+        self.inference_state: Optional[Any] = None
         self.device = torch.device(self.config.device)
         self.performance_stats = {
             'total_frames_processed': 0,
@@ -63,45 +87,91 @@ class SAM2SegmentationEngine:
     def _initialize_engine(self):
         """Initialize SAM2.1 models and optimizations"""
         print(f"🚀 Initializing SAM2.1 Engine on {self.device}")
+        print(f"📊 SAM2 available: {SAM2_AVAILABLE}, CUDA available: {torch.cuda.is_available()}")
         
-        if SAM2_AVAILABLE and self.device.type == "cuda":
-            self._initialize_sam2_models()
-        else:
-            self._initialize_fallback_engine()
+        # Try SAM2 if available (works on both GPU and CPU)
+        if SAM2_AVAILABLE:
+            try:
+                self._initialize_sam2_models()
+                return
+            except Exception as e:
+                print(f"⚠️ SAM2 initialization failed: {e}")
+                print("🔄 Falling back to traditional segmentation")
+        
+        # Always fallback to traditional methods if SAM2 fails
+        self._initialize_fallback_engine()
     
     def _initialize_sam2_models(self):
-        """Initialize official SAM2.1 models"""
+        """Initialize official SAM2.1 models with robust error handling"""
+        predictor_loaded = False
+        image_predictor_loaded = False
+        
         try:
+            print("📦 Loading SAM2 video predictor...")
             # Video predictor for motion graphics
             self.predictor = build_sam2_video_predictor(
                 self.config.model_cfg,
                 self.config.sam2_checkpoint,
                 device=self.device
             )
+            predictor_loaded = True
+            print("✅ SAM2 video predictor loaded")
             
+        except Exception as e:
+            print(f"⚠️ SAM2 video predictor failed: {e}")
+            self.predictor = None
+            
+        try:
+            print("📦 Loading SAM2 image predictor...")
             # Image predictor for single frame processing
             self.image_predictor = SAM2ImagePredictor.from_pretrained(
                 "facebook/sam2-hiera-large",
                 device=self.device
             )
-            
-            # Enable optimizations
-            if self.config.mixed_precision:
-                self.predictor = self.predictor.half()
-                self.image_predictor = self.image_predictor.half()
-            
-            if self.config.compile_model:
-                try:
-                    self.predictor = torch.compile(self.predictor)
-                    print("✅ torch.compile optimization enabled")
-                except Exception as e:
-                    print(f"⚠️ torch.compile failed: {e}")
-            
-            print("✅ SAM2.1 models initialized successfully")
+            image_predictor_loaded = True
+            print("✅ SAM2 image predictor loaded")
             
         except Exception as e:
-            print(f"❌ SAM2.1 initialization failed: {e}")
-            self._initialize_fallback_engine()
+            print(f"⚠️ SAM2 image predictor failed: {e}")
+            self.image_predictor = None
+            
+        # Apply optimizations only if models loaded and CUDA available
+        if (predictor_loaded or image_predictor_loaded):
+            self._apply_optimizations()
+            
+        # If neither model loaded, raise exception to trigger fallback
+        if not predictor_loaded and not image_predictor_loaded:
+            raise RuntimeError("Both SAM2 predictors failed to load")
+            
+        print(f"✅ SAM2.1 models initialized (Video: {predictor_loaded}, Image: {image_predictor_loaded})")
+    
+    def _apply_optimizations(self):
+        """Apply optimizations with proper device checking"""
+        # Only apply CUDA-specific optimizations on CUDA devices
+        if self.config.mixed_precision and self.device.type == "cuda":
+            try:
+                if self.predictor is not None:
+                    self.predictor = self.predictor.half()
+                if self.image_predictor is not None:
+                    self.image_predictor = self.image_predictor.half()
+                print("✅ Mixed precision enabled")
+            except Exception as e:
+                print(f"⚠️ Mixed precision failed: {e}")
+        
+        # Only compile on CUDA with PyTorch 2.0+
+        if self.config.compile_model and self.device.type == "cuda":
+            try:
+                import torch._dynamo
+                if hasattr(torch, 'compile') and torch.__version__ >= "2.0":
+                    if self.predictor is not None:
+                        self.predictor = torch.compile(self.predictor, mode="reduce-overhead")
+                    if self.image_predictor is not None:
+                        self.image_predictor = torch.compile(self.image_predictor, mode="reduce-overhead")
+                    print("✅ torch.compile optimization enabled")
+                else:
+                    print("⚠️ torch.compile not available (PyTorch < 2.0)")
+            except Exception as e:
+                print(f"⚠️ torch.compile failed: {e}")
     
     def _initialize_fallback_engine(self):
         """Initialize CPU-compatible fallback segmentation engine"""
@@ -158,11 +228,28 @@ class SAM2SegmentationEngine:
         }
         
         # Initialize inference state for video
-        if self.inference_state is None:
-            self.inference_state = self.predictor.init_state()
+        if self.inference_state is None and self.predictor is not None:
+            try:
+                self.inference_state = self.predictor.init_state()
+            except Exception as e:
+                print(f"⚠️ Failed to initialize SAM2 inference state: {e}")
+                self.inference_state = None
         
-        # Process frames with mixed precision
-        with torch.autocast(self.device.type, dtype=torch.bfloat16, enabled=self.config.mixed_precision):
+        # Process frames with mixed precision (only on CUDA)
+        autocast_enabled = self.config.mixed_precision and self.device.type == "cuda"
+        try:
+            if autocast_enabled:
+                autocast_context = torch.autocast(self.device.type, dtype=torch.bfloat16, enabled=True)
+            else:
+                # Dummy context manager for CPU
+                import contextlib
+                autocast_context = contextlib.nullcontext()
+        except Exception as e:
+            print(f"⚠️ Autocast setup failed: {e}, using default precision")
+            import contextlib
+            autocast_context = contextlib.nullcontext()
+            
+        with autocast_context:
             for i, (frame, frame_idx) in enumerate(zip(frames, frame_indices)):
                 frame_start = time.time()
                 
@@ -173,29 +260,60 @@ class SAM2SegmentationEngine:
                     frame_rgb = frame
                 
                 # Add frame to inference state
-                self.predictor.add_new_frame(self.inference_state, frame_rgb)
+                try:
+                    if self.predictor is not None and self.inference_state is not None:
+                        self.predictor.add_new_frame(self.inference_state, frame_rgb)
+                    else:
+                        print("⚠️ SAM2 predictor or inference state not available")
+                        # Will fall back to image predictor below
+                except Exception as e:
+                    print(f"⚠️ Failed to add frame to inference state: {e}")
                 
                 # Automatic segmentation or prompt-based
                 if prompts and frame_idx in prompts:
                     # Use provided prompts
-                    ann_frame_idx, ann_obj_id, mask = self.predictor.add_new_mask(
-                        self.inference_state,
-                        frame_idx=frame_idx,
-                        obj_id=prompts[frame_idx]['obj_id'],
-                        mask=prompts[frame_idx]['mask']
-                    )
+                    if self.predictor is not None and self.inference_state is not None:
+                        ann_frame_idx, ann_obj_id, mask = self.predictor.add_new_mask(
+                            self.inference_state,
+                            frame_idx=frame_idx,
+                            obj_id=prompts[frame_idx]['obj_id'],
+                            mask=prompts[frame_idx]['mask']
+                        )
+                    else:
+                        print("⚠️ SAM2 predictor not available for prompt-based segmentation")
+                        mask = np.zeros((frame.shape[0], frame.shape[1]), dtype=bool)
                 else:
                     # Automatic segmentation using image predictor
-                    self.image_predictor.set_image(frame_rgb)
-                    
-                    # Generate automatic masks
-                    auto_masks = self.image_predictor.generate_masks()
-                    
-                    # Select best masks based on quality scores
-                    if auto_masks and len(auto_masks) > 0:
-                        # Sort by predicted IoU (quality score)
-                        best_masks = sorted(auto_masks, key=lambda x: x.get('predicted_iou', 0), reverse=True)
-                        mask = best_masks[0]['segmentation']
+                    if self.image_predictor is not None:
+                        try:
+                            self.image_predictor.set_image(frame_rgb)
+                            
+                            # Generate automatic masks
+                            if hasattr(self.image_predictor, 'generate_masks'):
+                                auto_masks = self.image_predictor.generate_masks()
+                            else:
+                                # Fallback to predict method
+                                masks, scores, logits = self.image_predictor.predict(
+                                    point_coords=None,
+                                    point_labels=None,
+                                    multimask_output=True,
+                                    return_logits=True
+                                )
+                                auto_masks = [{
+                                    'segmentation': masks[i],
+                                    'predicted_iou': scores[i] if i < len(scores) else 0.5
+                                } for i in range(len(masks))]
+                            
+                            # Select best masks based on quality scores
+                            if auto_masks and len(auto_masks) > 0:
+                                # Sort by predicted IoU (quality score)
+                                best_masks = sorted(auto_masks, key=lambda x: x.get('predicted_iou', 0), reverse=True)
+                                mask = best_masks[0]['segmentation']
+                            else:
+                                mask = np.zeros((frame.shape[0], frame.shape[1]), dtype=bool)
+                        except Exception as e:
+                            print(f"⚠️ SAM2 image prediction failed: {e}, using fallback")
+                            mask = np.zeros((frame.shape[0], frame.shape[1]), dtype=bool)
                     else:
                         mask = np.zeros((frame.shape[0], frame.shape[1]), dtype=bool)
                 
@@ -291,8 +409,12 @@ class SAM2SegmentationEngine:
         
         edges_canny = cv2.Canny(l_enhanced, 50, 150)
         
-        # Combine edge information
-        edges_combined = cv2.bitwise_or(edges_sobel, edges_canny)
+        # Ensure both arrays are same type for bitwise operation
+        edges_sobel = edges_sobel.astype(np.uint8)
+        edges_canny = edges_canny.astype(np.uint8)
+        
+        # Combine edge information using numpy bitwise_or for type safety
+        edges_combined = np.bitwise_or(edges_sobel, edges_canny)
         
         # Morphological operations
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
@@ -357,7 +479,7 @@ class SAM2SegmentationEngine:
         
         return min(quality_score, 1.0)
     
-    def _update_performance_stats(self, num_frames: int, elapsed_time: float):
+    def _update_performance_stats(self, num_frames: int, elapsed_time: float) -> None:
         """Update performance statistics"""
         
         self.performance_stats['total_frames_processed'] += num_frames
@@ -391,7 +513,14 @@ class SAM2SegmentationEngine:
         if hasattr(self, 'predictor') and self.predictor is not None:
             # Clear CUDA cache if using GPU
             if self.device.type == "cuda":
-                torch.cuda.empty_cache()
+                try:
+                    torch.cuda.empty_cache()
+                except Exception as e:
+                    print(f"⚠️ Failed to clear CUDA cache: {e}")
+        
+        # Clear all references
+        self.predictor = None
+        self.image_predictor = None
 
 
 # Utility functions for integration with existing pipeline
@@ -457,9 +586,16 @@ def convert_to_clusters(
         final_labels[filtered_labels == old_label] = new_label
     
     # Create visualization (compatible with existing visualizer)
-    from .visualizer import Visualizer
-    viz = Visualizer()
-    labels_vis = viz.show_labels(final_labels)
+    try:
+        from .visualizer import Visualizer
+        viz = Visualizer()
+        labels_vis = viz.show_labels(final_labels)
+        # Ensure labels_vis is ndarray
+        if not isinstance(labels_vis, np.ndarray):
+            labels_vis = np.array(labels_vis, dtype=np.uint8)
+    except Exception as e:
+        print(f"⚠️ Visualization failed: {e}, using dummy output")
+        labels_vis = np.zeros_like(final_labels, dtype=np.uint8)
     
     return final_labels - 1, labels_vis  # Subtract 1 to match existing format
 

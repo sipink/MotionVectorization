@@ -29,14 +29,86 @@ from concurrent.futures import ThreadPoolExecutor
 import psutil
 import gc
 
-# Import all three engines and bridges (direct imports for LSP compatibility)
-from .sam2_engine import SAM2SegmentationEngine, SAM2Config
-from .cotracker3_engine import CoTracker3TrackerEngine, CoTracker3Config
-from .flowseek_engine import FlowSeekEngine, FlowSeekConfig, MotionBasisDecomposer
-from .sam2_cotracker_bridge import SAM2CoTrackerBridge, BridgeConfig
-from .sam2_flowseek_bridge import SAM2FlowSeekBridge, SAM2FlowSeekBridgeConfig
+# Import all three engines and bridges with robust error handling
+ENGINE_AVAILABILITY = {
+    'sam2': False,
+    'cotracker3': False,
+    'flowseek': False,
+    'bridges': False
+}
 
-ENGINES_AVAILABLE = True
+# Try importing SAM2 engine
+try:
+    from .sam2_engine import SAM2SegmentationEngine, SAM2Config
+    ENGINE_AVAILABILITY['sam2'] = True
+    print("✅ SAM2 engine imported successfully")
+except ImportError as e:
+    print(f"⚠️ SAM2 engine import failed: {e}")
+    # Create dummy classes for graceful fallback
+    class SAM2SegmentationEngine:
+        def __init__(self, *args, **kwargs):
+            raise RuntimeError("SAM2 engine not available")
+    class SAM2Config:
+        def __init__(self, *args, **kwargs):
+            pass
+
+# Try importing CoTracker3 engine
+try:
+    from .cotracker3_engine import CoTracker3TrackerEngine, CoTracker3Config
+    ENGINE_AVAILABILITY['cotracker3'] = True
+    print("✅ CoTracker3 engine imported successfully")
+except ImportError as e:
+    print(f"⚠️ CoTracker3 engine import failed: {e}")
+    # Create dummy classes for graceful fallback
+    class CoTracker3TrackerEngine:
+        def __init__(self, *args, **kwargs):
+            raise RuntimeError("CoTracker3 engine not available")
+    class CoTracker3Config:
+        def __init__(self, *args, **kwargs):
+            pass
+
+# Try importing FlowSeek engine
+try:
+    from .flowseek_engine import FlowSeekEngine, FlowSeekConfig, MotionBasisDecomposer
+    ENGINE_AVAILABILITY['flowseek'] = True
+    print("✅ FlowSeek engine imported successfully")
+except ImportError as e:
+    print(f"⚠️ FlowSeek engine import failed: {e}")
+    # Create dummy classes for graceful fallback
+    class FlowSeekEngine:
+        def __init__(self, *args, **kwargs):
+            raise RuntimeError("FlowSeek engine not available")
+    class FlowSeekConfig:
+        def __init__(self, *args, **kwargs):
+            pass
+    class MotionBasisDecomposer:
+        def __init__(self, *args, **kwargs):
+            pass
+
+# Try importing bridge components
+try:
+    from .sam2_cotracker_bridge import SAM2CoTrackerBridge, BridgeConfig
+    from .sam2_flowseek_bridge import SAM2FlowSeekBridge, SAM2FlowSeekBridgeConfig
+    ENGINE_AVAILABILITY['bridges'] = True
+    print("✅ Bridge components imported successfully")
+except ImportError as e:
+    print(f"⚠️ Bridge components import failed: {e}")
+    # Create dummy classes for graceful fallback
+    class SAM2CoTrackerBridge:
+        def __init__(self, *args, **kwargs):
+            pass
+    class SAM2FlowSeekBridge:
+        def __init__(self, *args, **kwargs):
+            pass
+    class BridgeConfig:
+        def __init__(self, *args, **kwargs):
+            pass
+    class SAM2FlowSeekBridgeConfig:
+        def __init__(self, *args, **kwargs):
+            pass
+
+print(f"🎯 Engine availability: {ENGINE_AVAILABILITY}")
+ENGINES_AVAILABLE = any(ENGINE_AVAILABILITY.values())
 
 
 @dataclass
@@ -57,11 +129,17 @@ class UnifiedPipelineConfig:
     target_fps: float = 44.0
     quality_threshold: float = 0.9
     
-    # Engine-specific configurations
+    # Engine-specific configurations (will be created if engines are available)
     sam2_config: Optional[SAM2Config] = None
     cotracker3_config: Optional[CoTracker3Config] = None
     flowseek_config: Optional[FlowSeekConfig] = None
     bridge_config: Optional[BridgeConfig] = None
+    
+    # Engine availability and fallback settings
+    require_sam2: bool = False  # If True, fail if SAM2 not available
+    require_cotracker3: bool = False  # If True, fail if CoTracker3 not available
+    require_flowseek: bool = False  # If True, fail if FlowSeek not available
+    fallback_to_traditional: bool = True  # Use traditional methods as fallback
     
     # Cross-engine validation settings
     enable_cross_validation: bool = True
@@ -88,7 +166,12 @@ class UnifiedPipelineConfig:
     verbose_logging: bool = True
     
     def __post_init__(self):
-        """Initialize mode-specific configurations"""
+        """Initialize mode-specific configurations with engine availability checks"""
+        # Auto-detect device if needed
+        if self.device == "auto":
+            self.device = "cuda" if torch.cuda.is_available() else "cpu"
+            
+        # Configure mode-specific settings
         if self.mode == "speed":
             self._configure_speed_mode()
         elif self.mode == "balanced":
@@ -96,9 +179,25 @@ class UnifiedPipelineConfig:
         elif self.mode == "accuracy":
             self._configure_accuracy_mode()
             
-        # Auto-detect device if needed
-        if self.device == "auto":
-            self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        # Validate engine requirements
+        self._validate_engine_requirements()
+    
+    def _validate_engine_requirements(self):
+        """Validate that required engines are available"""
+        if self.require_sam2 and not ENGINE_AVAILABILITY['sam2']:
+            raise RuntimeError("SAM2 engine required but not available")
+        if self.require_cotracker3 and not ENGINE_AVAILABILITY['cotracker3']:
+            raise RuntimeError("CoTracker3 engine required but not available")
+        if self.require_flowseek and not ENGINE_AVAILABILITY['flowseek']:
+            raise RuntimeError("FlowSeek engine required but not available")
+            
+        # Warn about missing engines
+        if not ENGINE_AVAILABILITY['sam2']:
+            print("⚠️ SAM2 not available, will use traditional segmentation")
+        if not ENGINE_AVAILABILITY['cotracker3']:
+            print("⚠️ CoTracker3 not available, will use optical flow tracking")
+        if not ENGINE_AVAILABILITY['flowseek']:
+            print("⚠️ FlowSeek not available, will use traditional optical flow")
             
     def _configure_speed_mode(self):
         """Optimize for maximum speed"""
@@ -109,27 +208,35 @@ class UnifiedPipelineConfig:
         self.enable_cross_validation = False
         self.batch_size = 4
         
-        # Speed-optimized engine configs
-        if self.sam2_config is None:
+        # Speed-optimized engine configs (only if engines are available)
+        if self.sam2_config is None and ENGINE_AVAILABILITY['sam2']:
             self.sam2_config = SAM2Config(
-                model_cfg="sam2_hiera_s.yaml",  # Small model for speed
+                device=self.device,
                 mixed_precision=True,
                 compile_model=True
             )
         
-        if self.cotracker3_config is None:
+        if self.cotracker3_config is None and ENGINE_AVAILABILITY['cotracker3']:
             self.cotracker3_config = CoTracker3Config(
+                device=self.device,
                 model_variant="cotracker3_online",  # Online mode for speed
                 grid_size=30,  # Smaller grid
                 mixed_precision=True
             )
             
         if self.flowseek_config is None:
-            self.flowseek_config = FlowSeekConfig(
-                adaptive_complexity=True,
-                searaft_fallback=True,
-                iters=8  # Fewer iterations
-            )
+            if ENGINE_AVAILABILITY['flowseek']:
+                self.flowseek_config = FlowSeekConfig(
+                    device=self.device,
+                    mixed_precision=True,
+                    compile_model=True
+                )
+            else:
+                self.flowseek_config = FlowSeekConfig(
+                    adaptive_complexity=True,
+                    searaft_fallback=True,
+                    iters=8  # Fewer iterations
+                )
             
     def _configure_balanced_mode(self):
         """Balance speed and accuracy"""
@@ -139,22 +246,25 @@ class UnifiedPipelineConfig:
         self.batch_size = 2
         
         # Balanced engine configs
-        if self.sam2_config is None:
+        if self.sam2_config is None and ENGINE_AVAILABILITY['sam2']:
             self.sam2_config = SAM2Config(
                 model_cfg="sam2_hiera_l.yaml",  # Large model
+                device=self.device,
                 mixed_precision=True,
                 compile_model=True
             )
             
-        if self.cotracker3_config is None:
+        if self.cotracker3_config is None and ENGINE_AVAILABILITY['cotracker3']:
             self.cotracker3_config = CoTracker3Config(
                 model_variant="cotracker3_offline",  # Offline for accuracy
+                device=self.device,
                 grid_size=40,
                 mixed_precision=True
             )
             
-        if self.flowseek_config is None:
+        if self.flowseek_config is None and ENGINE_AVAILABILITY['flowseek']:
             self.flowseek_config = FlowSeekConfig(
+                device=self.device,
                 adaptive_complexity=True,
                 depth_integration=True,
                 iters=12
@@ -170,23 +280,26 @@ class UnifiedPipelineConfig:
         self.batch_size = 1
         
         # Accuracy-optimized engine configs
-        if self.sam2_config is None:
+        if self.sam2_config is None and ENGINE_AVAILABILITY['sam2']:
             self.sam2_config = SAM2Config(
                 model_cfg="sam2_hiera_l.yaml",  # Large model
+                device=self.device,
                 mixed_precision=False,  # Full precision
                 accuracy_threshold=0.98
             )
             
-        if self.cotracker3_config is None:
+        if self.cotracker3_config is None and ENGINE_AVAILABILITY['cotracker3']:
             self.cotracker3_config = CoTracker3Config(
                 model_variant="cotracker3_offline",
+                device=self.device,
                 grid_size=50,  # Dense grid
                 mixed_precision=False,
                 accuracy_target=0.98
             )
             
-        if self.flowseek_config is None:
+        if self.flowseek_config is None and ENGINE_AVAILABILITY['flowseek']:
             self.flowseek_config = FlowSeekConfig(
+                device=self.device,
                 depth_integration=True,
                 adaptive_complexity=False,  # Always use FlowSeek
                 iters=16,  # More iterations for accuracy
@@ -277,36 +390,51 @@ class UnifiedMotionPipeline:
         print("🔧 Initializing engines...")
         
         # SAM2.1 Segmentation Engine
-        try:
-            self.sam2_engine = SAM2SegmentationEngine(self.config.sam2_config)
-            if self.config.compile_optimization:
-                self.sam2_engine = torch.compile(self.sam2_engine)
-            print("✅ SAM2.1 engine ready")
-        except Exception as e:
-            print(f"⚠️ SAM2.1 initialization failed: {e}")
+        if ENGINE_AVAILABILITY['sam2'] and self.config.sam2_config is not None:
+            try:
+                self.sam2_engine = SAM2SegmentationEngine(self.config.sam2_config)
+                if self.config.compile_optimization and self.device.type == 'cuda':
+                    self.sam2_engine = torch.compile(self.sam2_engine)
+                print("✅ SAM2.1 engine ready")
+            except Exception as e:
+                print(f"⚠️ SAM2.1 initialization failed: {e}")
+                self.sam2_engine = None
+        else:
+            print("⚠️ SAM2.1 engine not available or not configured")
+            self.sam2_engine = None
             
         # CoTracker3 Tracking Engine
-        try:
-            self.cotracker3_engine = CoTracker3TrackerEngine(self.config.cotracker3_config)
-            if self.config.compile_optimization:
-                self.cotracker3_engine = torch.compile(self.cotracker3_engine)
-            print("✅ CoTracker3 engine ready")
-        except Exception as e:
-            print(f"⚠️ CoTracker3 initialization failed: {e}")
+        if ENGINE_AVAILABILITY['cotracker3'] and self.config.cotracker3_config is not None:
+            try:
+                self.cotracker3_engine = CoTracker3TrackerEngine(self.config.cotracker3_config)
+                if self.config.compile_optimization and self.device.type == 'cuda':
+                    self.cotracker3_engine = torch.compile(self.cotracker3_engine)
+                print("✅ CoTracker3 engine ready")
+            except Exception as e:
+                print(f"⚠️ CoTracker3 initialization failed: {e}")
+                self.cotracker3_engine = None
+        else:
+            print("⚠️ CoTracker3 engine not available or not configured")
+            self.cotracker3_engine = None
             
         # FlowSeek Optical Flow Engine
-        try:
-            from .flowseek_engine import create_flowseek_engine
-            self.flowseek_engine = create_flowseek_engine(
-                config=self.config.flowseek_config,
-                device=self.device,
-                mixed_precision=self.config.mixed_precision
-            )
-            if self.config.compile_optimization:
-                self.flowseek_engine = torch.compile(self.flowseek_engine)
-            print("✅ FlowSeek engine ready")
-        except Exception as e:
-            print(f"⚠️ FlowSeek initialization failed: {e}")
+        if ENGINE_AVAILABILITY['flowseek'] and self.config.flowseek_config is not None:
+            try:
+                from .flowseek_engine import create_flowseek_engine
+                self.flowseek_engine = create_flowseek_engine(
+                    config=self.config.flowseek_config,
+                    device=self.device,
+                    mixed_precision=self.config.mixed_precision
+                )
+                if self.config.compile_optimization and self.device.type == 'cuda':
+                    self.flowseek_engine = torch.compile(self.flowseek_engine)
+                print("✅ FlowSeek engine ready")
+            except Exception as e:
+                print(f"⚠️ FlowSeek initialization failed: {e}")
+                self.flowseek_engine = None
+        else:
+            print("⚠️ FlowSeek engine not available or not configured")
+            self.flowseek_engine = None
             
     def _setup_cross_validation(self):
         """Setup cross-engine validation bridges"""
@@ -339,45 +467,63 @@ class UnifiedMotionPipeline:
             print(f"⚠️ Cross-validation bridges setup failed: {e}")
             self.config.enable_cross_validation = False
             
-    def _optimize_pipeline(self):
-        """Apply global optimizations across the entire pipeline"""
+    def _optimize_pipeline(self) -> None:
+        """Apply global optimizations across the entire pipeline with error handling"""
         print("⚡ Applying global optimizations...")
         
-        # GPU optimizations
-        if self.device.type == "cuda":
-            torch.backends.cudnn.benchmark = True
-            torch.backends.cuda.matmul.allow_tf32 = True
-            torch.backends.cudnn.allow_tf32 = True
-            
-            # Multi-GPU setup if available
-            if self.config.multi_gpu and torch.cuda.device_count() > 1:
-                print(f"🚀 Multi-GPU setup: {torch.cuda.device_count()} GPUs detected")
-                # Setup DataParallel for supported engines
+        try:
+            # GPU optimizations with validation
+            if self.device.type == "cuda" and torch.cuda.is_available():
+                torch.backends.cudnn.benchmark = True
                 
-        # Memory optimization
-        if self.config.memory_efficient:
-            torch.cuda.empty_cache()
-            gc.collect()
+                # Enable TF32 if supported (Ampere+ GPUs)
+                if hasattr(torch.backends.cuda.matmul, 'allow_tf32'):
+                    torch.backends.cuda.matmul.allow_tf32 = True
+                if hasattr(torch.backends.cudnn, 'allow_tf32'):
+                    torch.backends.cudnn.allow_tf32 = True
+                
+                # Multi-GPU setup if available and requested
+                if self.config.multi_gpu and torch.cuda.device_count() > 1:
+                    print(f"🚀 Multi-GPU setup: {torch.cuda.device_count()} GPUs detected")
+                    # Note: Actual DataParallel setup would be engine-specific
+                
+            # Memory optimization with error handling
+            if self.config.memory_efficient:
+                try:
+                    if self.device.type == "cuda":
+                        torch.cuda.empty_cache()
+                    gc.collect()
+                except Exception as e:
+                    print(f"⚠️ Memory optimization failed: {e}")
+                
+            print("✅ Global optimizations applied")
             
-        print("✅ Global optimizations applied")
+        except Exception as e:
+            print(f"⚠️ Pipeline optimization failed: {e}")
+            print("   Continuing with default settings")
         
-    def _warmup_pipeline(self):
-        """Warmup all engines for optimal performance"""
+    def _warmup_pipeline(self) -> None:
+        """Warmup all engines for optimal performance with error handling"""
         print("🔥 Warming up pipeline...")
         
-        # Create dummy input for warmup
-        dummy_frame = np.random.randint(0, 255, (480, 640, 3), dtype=np.uint8)
-        dummy_video = np.stack([dummy_frame, dummy_frame], axis=0)
-        
         try:
-            # Warmup with small dummy input
+            # Create minimal dummy input for warmup
+            dummy_frame = np.random.randint(0, 255, (240, 320, 3), dtype=np.uint8)  # Smaller for warmup
+            
+            # Warmup with small dummy input  
             _ = self.process_frame_pair(
                 dummy_frame, dummy_frame,
                 warmup=True
             )
             print("✅ Pipeline warmed up successfully")
+            
+            # Clear any warmup artifacts from memory
+            if self.device.type == 'cuda':
+                torch.cuda.empty_cache()
+                
         except Exception as e:
             print(f"⚠️ Pipeline warmup failed: {e}")
+            print("   Continuing without warmup - performance may be slower initially")
             
     def process_video_sequence(
         self,
@@ -415,10 +561,20 @@ class UnifiedMotionPipeline:
         for dir_path in [segmentation_dir, tracking_dir, flow_dir, motion_dir, viz_dir]:
             dir_path.mkdir(parents=True, exist_ok=True)
         
-        # Load video
+        # Load video with error handling
         cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            raise ValueError(f"Failed to open video file: {video_path}")
+        
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         fps = cap.get(cv2.CAP_PROP_FPS)
+        
+        if total_frames <= 0:
+            cap.release()
+            raise ValueError(f"Invalid video file: no frames found in {video_path}")
+        if fps <= 0:
+            print(f"⚠️ Warning: Invalid FPS value {fps}, using default 30 FPS")
+            fps = 30.0
         
         # Determine processing range
         if max_frames > 0:
@@ -436,13 +592,19 @@ class UnifiedMotionPipeline:
         for frame_idx in range(frames_to_process):
             ret, frame = cap.read()
             if not ret:
+                print(f"⚠️ Warning: Failed to read frame {start_frame + frame_idx}")
                 break
+            if frame is None or frame.size == 0:
+                print(f"⚠️ Warning: Empty frame at index {start_frame + frame_idx}")
+                continue
             frames.append(frame)
         
         cap.release()
         
+        cap.release()
+        
         if len(frames) < 2:
-            raise ValueError("Need at least 2 frames for motion vectorization")
+            raise ValueError(f"Need at least 2 frames for motion vectorization, but only got {len(frames)} valid frames")
         
         # Process video in unified pipeline
         processing_results = []
@@ -869,33 +1031,62 @@ class UnifiedMotionPipeline:
     # ================================
     
     def _prepare_video_tensor(self, frames: List[np.ndarray]) -> torch.Tensor:
-        """Prepare video tensor for processing"""
-        rgb_frames = []
-        for frame in frames:
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
-            rgb_frames.append(frame_rgb)
-            
-        video = np.stack(rgb_frames, axis=0)
-        video_tensor = torch.tensor(video, dtype=torch.float32)
-        video_tensor = video_tensor.permute(0, 3, 1, 2).unsqueeze(0)  # (1, T, 3, H, W)
+        """Prepare video tensor for processing with error handling"""
+        if not frames:
+            raise ValueError("Empty frames list provided")
         
-        return video_tensor.to(self.device)
+        rgb_frames = []
+        for i, frame in enumerate(frames):
+            if frame is None or frame.size == 0:
+                raise ValueError(f"Frame {i} is None or empty")
+            if len(frame.shape) != 3 or frame.shape[2] != 3:
+                raise ValueError(f"Frame {i} has invalid shape {frame.shape}, expected (H, W, 3)")
+            
+            try:
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
+                rgb_frames.append(frame_rgb)
+            except Exception as e:
+                raise RuntimeError(f"Failed to process frame {i}: {e}")
+            
+        try:
+            video = np.stack(rgb_frames, axis=0)
+            video_tensor = torch.tensor(video, dtype=torch.float32, device=self.device)
+            video_tensor = video_tensor.permute(0, 3, 1, 2).unsqueeze(0)  # (1, T, 3, H, W)
+            return video_tensor
+        except Exception as e:
+            raise RuntimeError(f"Failed to create video tensor: {e}")
         
     def _prepare_image_tensor(self, frame: np.ndarray) -> torch.Tensor:
-        """Prepare single image tensor"""
-        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB).astype(np.float32)
-        tensor = torch.tensor(frame_rgb).permute(2, 0, 1).unsqueeze(0)
-        return tensor.to(self.device)
+        """Prepare single image tensor with error handling"""
+        if frame is None or frame.size == 0:
+            raise ValueError("Input frame is None or empty")
+        if len(frame.shape) != 3 or frame.shape[2] != 3:
+            raise ValueError(f"Expected frame shape (H, W, 3), got {frame.shape}")
+            
+        try:
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB).astype(np.float32)
+            tensor = torch.tensor(frame_rgb, device=self.device).permute(2, 0, 1).unsqueeze(0)
+            return tensor
+        except Exception as e:
+            raise RuntimeError(f"Failed to prepare image tensor: {e}")
         
     def _extract_tracking_points_from_masks(self, mask: np.ndarray) -> Optional[torch.Tensor]:
-        """Extract tracking points from segmentation mask"""
+        """Extract tracking points from segmentation mask with optimized processing"""
+        if mask is None or mask.size == 0:
+            return None
+            
         try:
+            # Optimize unique ID extraction - skip background (0)
             unique_ids = np.unique(mask)
+            unique_ids = unique_ids[unique_ids != 0]  # Remove background
+            
+            if len(unique_ids) == 0:
+                return None
+                
             all_points = []
             
             for obj_id in unique_ids:
-                if obj_id == 0:  # Skip background
-                    continue
+                # Background already filtered out above
                     
                 obj_mask = (mask == obj_id).astype(np.uint8)
                 contours, _ = cv2.findContours(obj_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -912,11 +1103,17 @@ class UnifiedMotionPipeline:
                     all_points.extend(points)
             
             if all_points:
-                query_points = torch.tensor(all_points, dtype=torch.float32).unsqueeze(0)
-                return query_points.to(self.device)
+                # Optimize tensor creation - create directly on target device
+                query_points = torch.tensor(
+                    all_points, 
+                    dtype=torch.float32, 
+                    device=self.device
+                ).unsqueeze(0)
+                return query_points
                 
         except Exception as e:
             print(f"⚠️ Point extraction from masks failed: {e}")
+            return None
             
         return None
         
@@ -1022,11 +1219,22 @@ class UnifiedMotionPipeline:
         flow_results: Dict[str, Any]
     ) -> float:
         """Validate consistency between tracking and optical flow"""
+        if not tracking_results or not flow_results:
+            return 0.0
+            
         try:
             tracks = tracking_results.get('tracks')
             forward_flow = flow_results.get('forward_flow')
             
             if tracks is None or forward_flow is None:
+                return 0.0
+            
+            # Validate tensor types and shapes
+            if not isinstance(tracks, torch.Tensor) or not isinstance(forward_flow, np.ndarray):
+                print("⚠️ Invalid tensor types in consistency validation")
+                return 0.0
+            
+            if tracks.numel() == 0 or forward_flow.size == 0:
                 return 0.0
                 
             # Extract track-based motion
@@ -1068,12 +1276,25 @@ class UnifiedMotionPipeline:
         tracking_results: Dict[str, Any]
     ) -> float:
         """Validate alignment between segmentation and tracking"""
+        if not segmentation_results or not tracking_results:
+            return 0.0
+            
         try:
             masks = segmentation_results.get('masks')
             tracks = tracking_results.get('tracks')
             visibility = tracking_results.get('visibility')
             
-            if masks is None or tracks is None or len(masks) == 0:
+            if masks is None or tracks is None or visibility is None:
+                return 0.0
+            
+            # Validate data types and shapes
+            if isinstance(masks, list) and len(masks) == 0:
+                return 0.0
+            if isinstance(masks, np.ndarray) and masks.size == 0:
+                return 0.0
+            if not isinstance(tracks, torch.Tensor) or tracks.numel() == 0:
+                return 0.0
+            if not isinstance(visibility, torch.Tensor) or visibility.numel() == 0:
                 return 0.0
                 
             mask = masks[0]  # First frame mask
@@ -1107,23 +1328,28 @@ class UnifiedMotionPipeline:
             return 0.0
             
     def _get_gpu_utilization(self) -> float:
-        """Get current GPU utilization"""
+        """Get current GPU utilization with error handling"""
         try:
-            if self.device.type == 'cuda':
-                # Simple memory-based utilization estimate
-                allocated = torch.cuda.memory_allocated(self.device)
-                cached = torch.cuda.memory_reserved(self.device)
-                total_memory = torch.cuda.get_device_properties(self.device).total_memory
-                
-                utilization = (allocated + cached) / total_memory
-                return float(np.clip(utilization, 0.0, 1.0))
-        except Exception:
-            pass
+            if self.device.type == 'cuda' and torch.cuda.is_available():
+                device_idx = self.device.index or 0
+                if device_idx < torch.cuda.device_count():
+                    allocated = torch.cuda.memory_allocated(device_idx)
+                    cached = torch.cuda.memory_reserved(device_idx)
+                    total_memory = torch.cuda.get_device_properties(device_idx).total_memory
+                    
+                    if total_memory > 0:
+                        utilization = (allocated + cached) / total_memory
+                        return float(np.clip(utilization, 0.0, 1.0))
+        except Exception as e:
+            print(f"⚠️ GPU utilization check failed: {e}")
             
         return 0.0
         
-    def _update_performance_stats(self, results: Dict[str, Any]):
-        """Update global performance statistics"""
+    def _update_performance_stats(self, results: Dict[str, Any]) -> None:
+        """Update global performance statistics with validation"""
+        if not results:
+            return
+            
         self.performance_stats['total_frames_processed'] += 1
         
         # Processing times
@@ -1131,11 +1357,15 @@ class UnifiedMotionPipeline:
         total_time = perf_metrics.get('total_processing_time', 0.0)
         self.performance_stats['total_processing_time'] += total_time
         
-        if self.performance_stats['total_frames_processed'] > 0:
+        # Prevent division by zero
+        if (self.performance_stats['total_frames_processed'] > 0 and 
+            self.performance_stats['total_processing_time'] > 0):
             self.performance_stats['average_fps'] = (
                 self.performance_stats['total_frames_processed'] / 
                 self.performance_stats['total_processing_time']
             )
+        else:
+            self.performance_stats['average_fps'] = 0.0
         
         # Quality scores
         quality_scores = results.get('quality_scores', {})
@@ -1158,16 +1388,19 @@ class UnifiedMotionPipeline:
         self.performance_stats['gpu_utilization'].append(gpu_util)
         
     def get_performance_summary(self) -> Dict[str, Any]:
-        """Get comprehensive performance summary"""
+        """Get comprehensive performance summary with error handling"""
         if self.performance_stats['total_frames_processed'] == 0:
-            return {'status': 'no_data'}
+            return {'status': 'no_data', 'message': 'No frames have been processed yet'}
         
         summary = {
             'frames_processed': self.performance_stats['total_frames_processed'],
             'total_time': self.performance_stats['total_processing_time'],
             'average_fps': self.performance_stats['average_fps'],
             'target_fps': self.config.target_fps,
-            'performance_ratio': self.performance_stats['average_fps'] / self.config.target_fps,
+            'performance_ratio': (
+                self.performance_stats['average_fps'] / self.config.target_fps 
+                if self.config.target_fps > 0 else 0.0
+            ),
         }
         
         # Quality statistics
@@ -1204,34 +1437,65 @@ class UnifiedMotionPipeline:
         
         return summary
         
-    def _save_frame_results(self, results, frame_idx, seg_dir, track_dir, flow_dir, motion_dir):
-        """Save individual frame results"""
-        # Save segmentation masks
-        if results['segmentation'].get('masks') is not None:
-            masks = results['segmentation']['masks']
-            for i, mask in enumerate(masks):
-                mask_path = seg_dir / f"frame_{frame_idx:04d}_mask_{i}.png"
-                cv2.imwrite(str(mask_path), (mask * 255).astype(np.uint8))
+    def _save_frame_results(self, results: Dict[str, Any], frame_idx: int, seg_dir: Path, track_dir: Path, flow_dir: Path, motion_dir: Path) -> None:
+        """Save individual frame results with error handling"""
+        if not results:
+            return
+            
+        try:
+            # Save segmentation masks with validation
+            seg_data = results.get('segmentation', {})
+            if seg_data and seg_data.get('masks') is not None:
+                masks = seg_data['masks']
+                for i, mask in enumerate(masks):
+                    if mask is not None and mask.size > 0:
+                        mask_path = seg_dir / f"frame_{frame_idx:04d}_mask_{i}.png"
+                        mask_img = (mask * 255).astype(np.uint8)
+                        if not cv2.imwrite(str(mask_path), mask_img):
+                            print(f"⚠️ Failed to save mask {mask_path}")
+        except Exception as e:
+            print(f"⚠️ Failed to save segmentation results: {e}")
         
-        # Save tracking data
-        if results['tracking'].get('tracks') is not None:
-            track_data = {
-                'tracks': results['tracking']['tracks'].cpu().numpy().tolist(),
-                'visibility': results['tracking']['visibility'].cpu().numpy().tolist()
-            }
-            track_path = track_dir / f"frame_{frame_idx:04d}_tracks.json"
-            with open(track_path, 'w') as f:
-                json.dump(track_data, f, indent=2)
+        try:
+            # Save tracking data with validation
+            track_data_raw = results.get('tracking', {})
+            if track_data_raw and track_data_raw.get('tracks') is not None:
+                tracks = track_data_raw['tracks']
+                visibility = track_data_raw.get('visibility')
+                
+                if isinstance(tracks, torch.Tensor) and tracks.numel() > 0:
+                    track_data = {
+                        'tracks': tracks.detach().cpu().numpy().tolist(),
+                    }
+                    if isinstance(visibility, torch.Tensor) and visibility.numel() > 0:
+                        track_data['visibility'] = visibility.detach().cpu().numpy().tolist()
+                    
+                    track_path = track_dir / f"frame_{frame_idx:04d}_tracks.json"
+                    with open(track_path, 'w') as f:
+                        json.dump(track_data, f, indent=2)
+        except Exception as e:
+            print(f"⚠️ Failed to save tracking results: {e}")
         
-        # Save optical flow
-        if results['optical_flow'].get('forward_flow') is not None:
-            flow_path = flow_dir / f"frame_{frame_idx:04d}_flow.npy"
-            np.save(flow_path, results['optical_flow']['forward_flow'])
+        try:
+            # Save optical flow with validation
+            flow_data = results.get('optical_flow', {})
+            if flow_data and flow_data.get('forward_flow') is not None:
+                forward_flow = flow_data['forward_flow']
+                if isinstance(forward_flow, np.ndarray) and forward_flow.size > 0:
+                    flow_path = flow_dir / f"frame_{frame_idx:04d}_flow.npy"
+                    np.save(flow_path, forward_flow)
+        except Exception as e:
+            print(f"⚠️ Failed to save optical flow results: {e}")
         
-        # Save motion parameters
-        motion_path = motion_dir / f"frame_{frame_idx:04d}_motion.json"
-        with open(motion_path, 'w') as f:
-            json.dump(results['motion_parameters'], f, indent=2)
+        try:
+            # Save motion parameters with validation
+            motion_params = results.get('motion_parameters', {})
+            if motion_params:
+                motion_path = motion_dir / f"frame_{frame_idx:04d}_motion.json"
+                with open(motion_path, 'w') as f:
+                    json.dump(motion_params, f, indent=2)
+        except Exception as e:
+            print(f"⚠️ Failed to save motion parameters: {e}")
             
     def _save_visualization(self, results: Dict[str, Any], viz_path: Path):
         """Save visualization of results"""
@@ -1240,11 +1504,24 @@ class UnifiedMotionPipeline:
         pass
         
     def _process_batch_results(self, batch_results: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Process and analyze batch results"""
+        """Process and analyze batch results with validation"""
+        if not batch_results:
+            return {
+                'batch_size': 0,
+                'successful_frames': 0,
+                'average_quality': 0.0,
+                'status': 'empty_batch'
+            }
+            
+        successful_frames = sum(1 for r in batch_results if r and r.get('status') == 'success')
+        quality_scores = [r.get('overall_quality', 0.0) for r in batch_results if r and isinstance(r.get('overall_quality'), (int, float))]
+        
         return {
             'batch_size': len(batch_results),
-            'successful_frames': sum(1 for r in batch_results if r['status'] == 'success'),
-            'average_quality': np.mean([r.get('overall_quality', 0.0) for r in batch_results])
+            'successful_frames': successful_frames,
+            'success_rate': successful_frames / len(batch_results) if batch_results else 0.0,
+            'average_quality': float(np.mean(quality_scores)) if quality_scores else 0.0,
+            'quality_std': float(np.std(quality_scores)) if len(quality_scores) > 1 else 0.0
         }
         
     def _generate_final_analysis(
@@ -1570,7 +1847,8 @@ class UnifiedQualityValidator:
                     physics_score *= 0.7
             
             return physics_score
-        except:
+        except Exception as e:
+            print(f"⚠️ Motion physics verification failed: {e}")
             return 0.8
     
     def _check_trajectory_continuity(self, trajectory: np.ndarray) -> float:
@@ -1589,7 +1867,8 @@ class UnifiedQualityValidator:
             # Continuity score (lower jumps = higher score)
             continuity_score = 1.0 - (large_jumps / len(pos_diffs))
             return max(0.0, continuity_score)
-        except:
+        except Exception as e:
+            print(f"⚠️ Trajectory continuity check failed: {e}")
             return 0.8
 
 
@@ -1619,17 +1898,27 @@ class GPUMemoryManager:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.cleanup()
         
-    def cleanup(self):
-        """Clean up GPU memory"""
-        if self.device.type == 'cuda':
-            torch.cuda.empty_cache()
+    def cleanup(self) -> None:
+        """Clean up GPU memory with error handling"""
+        try:
+            if self.device.type == 'cuda' and torch.cuda.is_available():
+                # Synchronize before cleanup
+                torch.cuda.synchronize(self.device)
+                torch.cuda.empty_cache()
             gc.collect()
+        except Exception as e:
+            print(f"⚠️ Memory cleanup failed: {e}")
             
     def get_memory_usage(self) -> float:
-        """Get current memory usage in MB"""
-        if self.device.type == 'cuda':
-            current = torch.cuda.memory_allocated(self.device)
-            return (current - self.initial_memory) / 1024 / 1024
+        """Get current memory usage in MB with error handling"""
+        try:
+            if self.device.type == 'cuda' and torch.cuda.is_available():
+                device_idx = self.device.index or 0
+                if device_idx < torch.cuda.device_count():
+                    current = torch.cuda.memory_allocated(device_idx)
+                    return (current - self.initial_memory) / 1024 / 1024
+        except Exception as e:
+            print(f"⚠️ Memory usage check failed: {e}")
         return 0.0
 
 

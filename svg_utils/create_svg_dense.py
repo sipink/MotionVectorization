@@ -1,6 +1,6 @@
 import argparse
 import json
-import drawSvg as draw
+import drawsvg as draw
 # import math
 import base64
 # import cv2
@@ -10,8 +10,12 @@ import os
 # import copy
 from io import BytesIO
 from PIL import Image as PILImage
+from PIL.Image import Resampling
 
-from .utils import *
+try:
+    from svg_utils.utils import calc_animation_duration, append_to_transform_value_arr, convert_image_to_base64
+except ImportError:
+    from utils import calc_animation_duration, append_to_transform_value_arr, convert_image_to_base64
 
 
 class Image(draw.DrawingParentElement):
@@ -34,7 +38,15 @@ parser.add_argument(
     '--frame_rate', default=24, type=int, 
     help='Output SVG frame rate.')    
 
-arg = parser.parse_args()
+# Only parse arguments when run as main script
+if __name__ == '__main__':
+    arg = parser.parse_args()
+else:
+    # Create a dummy args object for when imported as module
+    class DummyArgs:
+        video_dir = None
+        frame_rate = 24
+    arg = DummyArgs()
 
 
 def add_svg_obj(curr_shape, shape_id, shape_file_path, frame_size, animation_duration, frame_rate):
@@ -49,7 +61,7 @@ def add_svg_obj(curr_shape, shape_id, shape_file_path, frame_size, animation_dur
     if 'canonical' in curr_shape:
         sx, sy, theta = curr_shape['canonical'][0]
         im = im.resize((int(width * sx), int(height * sy)))
-        im = im.rotate(np.rad2deg(theta), PILImage.BILINEAR, expand=0)
+        im = im.rotate(np.rad2deg(theta), Resampling.BILINEAR, expand=0)
 
     # create a SVG image in base64 format
     buf = BytesIO()
@@ -57,7 +69,7 @@ def add_svg_obj(curr_shape, shape_id, shape_file_path, frame_size, animation_dur
     encoded_string = base64.b64encode(buf.getvalue())
 
     image = Image('data:image/png;base64,' + encoded_string.decode('utf-8'), width=width,
-                    height=height, x=-width/2, y=-height/2)
+                    height=height, x=int(-width/2), y=int(-height/2))
     
     animate_canon_rotation = []
     animate_canon_scale = []
@@ -209,7 +221,9 @@ def create_svg(motion_file, frame_height, frame_width):
         if i == '-1':
             continue
         curr_shape = motion_file[i]
-        shape_file_path = os.path.join(arg.video_dir, 'shapes', i +'.png')
+        if arg.video_dir is None:
+            raise ValueError("video_dir must be specified")
+        shape_file_path = os.path.join(arg.video_dir, 'shapes', i + '.png')
         if 'shape' in curr_shape:
             shape_file_path = curr_shape['shape']
         shape_id = "shape_" + str(i)
@@ -245,6 +259,8 @@ def create_svg(motion_file, frame_height, frame_width):
 
 
 def rank_z_index(motion_file):
+    if arg.video_dir is None:
+        raise ValueError("video_dir must be specified")
     shape_avg_z_s = []
     if "time" in motion_file["-1"]:
         global_frames = motion_file["-1"]["time"]
@@ -336,6 +352,8 @@ def append_animate_transform(image, type, dur, values_list, shape_name):
 
 
 def main():
+    if arg.video_dir is None:
+        raise ValueError("video_dir must be specified")
     motion_file = json.load(open(os.path.join(arg.video_dir, 'motion_file.json'), 'rb'))
 
     output_file_name = 'motion_file.svg'

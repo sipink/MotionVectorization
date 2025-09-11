@@ -1,9 +1,36 @@
-import librosa
+# Optional imports for audio processing
+try:
+    import librosa  # type: ignore
+    LIBROSA_AVAILABLE = True
+except ImportError:
+    librosa = None  # type: ignore
+    LIBROSA_AVAILABLE = False
+
+# Optional imports for easing functions  
+try:
+    from easing_functions import *  # type: ignore
+    EASING_FUNCTIONS_AVAILABLE = True
+except ImportError:
+    # Define stubs for missing easing functions
+    EASING_FUNCTIONS_AVAILABLE = False
+
+# Define easing function stubs when not available
+if not EASING_FUNCTIONS_AVAILABLE:
+    class QuinticEaseIn: pass
+    class QuinticEaseOut: pass
+    class QuinticEaseInOut: pass
+    class QuadEaseIn: pass
+    class QuadEaseOut: pass
+    class QuadEaseInOut: pass
+    class CubicEaseIn: pass
+    class CubicEaseOut: pass
+    class ExponentialEaseIn: pass
+    class LinearInOut: pass
+
 # import soundfile as sf
 # from xml.dom import minidom
 import math
 import numpy as np
-from easing_functions import *
 import base64
 from PIL import Image
 import io
@@ -21,8 +48,8 @@ def lerp(t, v0, v1):
 # c = 300 - The object has to move 300 to the right, ending at 500
 # d = 1 - The object has one second to perform this motion from 200 to 500
 def easeInQuart(t, b, c, d):
-	t /= d
-	return c*t*t*t*t + b
+        t /= d
+        return c*t*t*t*t + b
 
 # a < 1 speed up, a > 1 slowing down
 def linearSpeed(t, a):
@@ -33,21 +60,30 @@ utils_animate_keys = ['display_animate', 'z_animate',
                 'translate_transform','scale_transform', 
                 'rotate_transform', 'skewX_transform', 'skewY_transform']
 
-easing_function_mapping = {
-    'QuinticEaseIn': QuinticEaseIn,
-    'QuinticEaseOut': QuinticEaseOut,
-    'QuinticEaseInOut': QuinticEaseInOut,
-    'QuadEaseIn': QuadEaseIn,
-    'QuadEaseOut': QuadEaseOut,
-    'QuadEaseInOut': QuadEaseInOut,
-    'CubicEaseIn': CubicEaseIn,
-    'CubicEaseOut': CubicEaseOut,
-    'ExponentialEaseIn': ExponentialEaseIn,
-    'LinearInOut': LinearInOut
-}
+# Initialize easing function mapping with proper type handling
+def _build_easing_mapping():
+    return {
+        'QuinticEaseIn': QuinticEaseIn,  # type: ignore
+        'QuinticEaseOut': QuinticEaseOut,  # type: ignore
+        'QuinticEaseInOut': QuinticEaseInOut,  # type: ignore
+        'QuadEaseIn': QuadEaseIn,  # type: ignore
+        'QuadEaseOut': QuadEaseOut,  # type: ignore
+        'QuadEaseInOut': QuadEaseInOut,  # type: ignore
+        'CubicEaseIn': CubicEaseIn,  # type: ignore
+        'CubicEaseOut': CubicEaseOut,  # type: ignore
+        'ExponentialEaseIn': ExponentialEaseIn,  # type: ignore
+        'LinearInOut': LinearInOut  # type: ignore
+    }
+
+easing_function_mapping = _build_easing_mapping()
 
 
 def extract_beat_times(audio_file_path, dur):
+    if not LIBROSA_AVAILABLE:
+        print("Warning: librosa not available, returning empty beat times")
+        return np.array([])
+    
+    import librosa  # type: ignore
     y, sr = librosa.load(audio_file_path, duration=dur)
     y_harmonic, y_percussive = librosa.effects.hpss(y)
     tempo, beat_frames = librosa.beat.beat_track(y=y_percussive, sr=sr)
@@ -469,8 +505,11 @@ def trim_time(curr_svg_shape, start_index, end_index, frame_rate, svg_dom):
         curr_svg_shape[key].setAttribute('values', ';'.join(values))
         curr_svg_shape[key].setAttribute('dur', str(len(values) / frame_rate))
 
-    # metadata
-    setSVGAnimationMetadata(svg_dom, len(values), frame_rate)
+    # metadata - use values from the last processed key
+    sample_key = next(iter(utils_animate_keys))
+    if sample_key in curr_svg_shape and curr_svg_shape[sample_key] is not None:
+        sample_values = curr_svg_shape[sample_key].getAttribute('values').split(';')
+        setSVGAnimationMetadata(svg_dom, len(sample_values), frame_rate)
 
 def pad_time(curr_svg_shape, prev_padding_duration, after_padding_duration, prev_vis: str, after_vis: str, frame_rate, svg_dom):
     for key in utils_animate_keys:

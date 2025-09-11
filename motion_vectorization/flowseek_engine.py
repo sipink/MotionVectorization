@@ -44,14 +44,15 @@ except ImportError:
 
 try:
     # For autocast support
-    autocast = torch.cuda.amp.autocast
+    from torch.cuda.amp import autocast
 except ImportError:
     # Fallback for older PyTorch
-    class autocast:
+    class AutocastFallback:
         def __init__(self, enabled=True, device_type='cuda', dtype=torch.float16):
             self.enabled = enabled
         def __enter__(self): pass
         def __exit__(self, *args): pass
+    autocast = AutocastFallback
 
 
 @dataclass
@@ -59,12 +60,12 @@ class FlowSeekConfig:
     """Advanced configuration for FlowSeek optical flow engine"""
     # Core FlowSeek parameters
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
-    mixed_precision: bool = True
-    compile_model: bool = True
+    mixed_precision: bool = True  # Will be automatically disabled on CPU
+    compile_model: bool = True  # Will be automatically disabled on CPU
     
     # Motion bases configuration
     motion_bases_dim: int = 6  # Six basis vectors for 6-DOF motion
-    depth_integration: bool = True  # Use depth foundation models
+    depth_integration: bool = True  # Use depth foundation models (fallback on CPU)
     adaptive_complexity: bool = True  # Adaptive FlowSeek vs SEA-RAFT
     
     # Model selection and paths
@@ -83,6 +84,24 @@ class FlowSeekConfig:
     corr_radius: int = 4  # Correlation radius
     iters: int = 12  # Flow update iterations
     mixed_precision_dtype: torch.dtype = torch.float16
+    
+    def __post_init__(self):
+        """Auto-adjust settings based on device capabilities"""
+        cuda_available = torch.cuda.is_available()
+        
+        # Disable CUDA-specific features on CPU
+        if self.device == "cpu" or not cuda_available:
+            self.mixed_precision = False
+            self.compile_model = False
+            if not cuda_available:
+                self.device = "cpu"
+                
+        # Adjust parameters for CPU
+        if self.device == "cpu":
+            self.max_resolution = min(self.max_resolution, 512)  # Reduce resolution for CPU
+            self.corr_levels = min(self.corr_levels, 3)  # Reduce correlation levels
+            self.iters = min(self.iters, 8)  # Reduce iterations
+            self.depth_integration = DEPTH_MODELS_AVAILABLE  # Only if available
 
 
 class MotionBasisDecomposer(nn.Module):
@@ -524,72 +543,251 @@ class FlowSeekEngine(nn.Module):
     def __init__(self, config: FlowSeekConfig):
         super().__init__()
         self.config = config
+        self.device = torch.device(config.device)
         
-        # Feature encoders
-        self.fnet = FlowSeekEncoder(config, output_dim=256)
-        self.cnet = FlowSeekEncoder(config, output_dim=128 + 64)  # hidden + context
+        print(f"🚀 Initializing FlowSeek Engine on {self.device}")
+        print(f"📊 Depth models available: {DEPTH_MODELS_AVAILABLE}, CUDA available: {torch.cuda.is_available()}")
         
-        # Motion basis decomposer (core innovation)
-        self.motion_decomposer = MotionBasisDecomposer(config)
+        # Initialize components with error handling
+        self._initialize_components()
         
-        # Correlation pyramid
-        self.correlation_pyramid = FlowSeekCorrelationPyramid(config)
+        # Move to device and apply optimizations
+        self._setup_device_and_optimizations()
         
-        # Update block
-        self.update_block = FlowSeekUpdateBlock(config, hidden_dim=128)
-        
-        # Depth estimation (if not provided)
-        self.depth_estimator = None
-        if config.depth_integration and DEPTH_MODELS_AVAILABLE:
-            self._initialize_depth_estimator()
+    def _initialize_components(self):
+        """Initialize all FlowSeek components with error handling"""
+        try:
+            # Feature encoders
+            self.fnet = FlowSeekEncoder(self.config, output_dim=256)
+            self.cnet = FlowSeekEncoder(self.config, output_dim=128 + 64)  # hidden + context
+            print("✅ Feature encoders initialized")
+        except Exception as e:
+            print(f"❌ Feature encoder initialization failed: {e}")
+            raise
             
-        # Complexity assessor for adaptive mode switching
-        self.complexity_assessor = nn.Sequential(
-            nn.AdaptiveAvgPool2d((8, 8)),
-            nn.Flatten(),
-            nn.Linear(3 * 64, 128),
-            nn.ReLU(inplace=True),
-            nn.Linear(128, 1),
-            nn.Sigmoid()
-        )
+        try:
+            # Motion basis decomposer (core innovation)
+            self.motion_decomposer = MotionBasisDecomposer(self.config)
+            print("✅ Motion basis decomposer initialized")
+        except Exception as e:
+            print(f"❌ Motion decomposer initialization failed: {e}")
+            raise
+            
+        try:
+            # Correlation pyramid
+            self.correlation_pyramid = FlowSeekCorrelationPyramid(self.config)
+            print("✅ Correlation pyramid initialized")
+        except Exception as e:
+            print(f"❌ Correlation pyramid initialization failed: {e}")
+            raise
+            
+        try:
+            # Update block
+            self.update_block = FlowSeekUpdateBlock(self.config, hidden_dim=128)
+            print("✅ Update block initialized")
+        except Exception as e:
+            print(f"❌ Update block initialization failed: {e}")
+            raise
+            
+        try:
+            # Complexity assessor for adaptive mode switching
+            self.complexity_assessor = nn.Sequential(
+                nn.AdaptiveAvgPool2d((8, 8)),
+                nn.Flatten(),
+                nn.Linear(3 * 64, 128),
+                nn.ReLU(inplace=True),
+                nn.Linear(128, 1),
+                nn.Sigmoid()
+            )
+            print("✅ Complexity assessor initialized")
+        except Exception as e:
+            print(f"❌ Complexity assessor initialization failed: {e}")
+            raise
+            
+        # Depth estimation (if available)
+        self.depth_estimator = None
+        if self.config.depth_integration:
+            try:
+                self._initialize_depth_estimator()
+            except Exception as e:
+                print(f"⚠️ Depth estimator initialization failed: {e}")
+                self.depth_estimator = None
+                
+    def _setup_device_and_optimizations(self):
+        """Move model to device and apply optimizations"""
+        try:
+            # Move to device
+            self.to(self.device)
+            print(f"✅ Model moved to {self.device}")
+            
+            # Apply mixed precision only on CUDA
+            if self.config.mixed_precision and self.device.type == "cuda":
+                try:
+                    self.half()
+                    print("✅ Mixed precision enabled")
+                except Exception as e:
+                    print(f"⚠️ Mixed precision failed: {e}")
+            
+            # Apply compilation only on CUDA with PyTorch 2.0+
+            if self.config.compile_model and self.device.type == "cuda":
+                try:
+                    if hasattr(torch, 'compile') and torch.__version__ >= "2.0":
+                        self = torch.compile(self, mode="reduce-overhead")
+                        print("✅ Model compilation enabled")
+                    else:
+                        print("⚠️ torch.compile not available (PyTorch < 2.0)")
+                except Exception as e:
+                    print(f"⚠️ Model compilation failed: {e}")
+                    
+        except Exception as e:
+            print(f"⚠️ Device setup failed: {e}")
+            # Continue without optimizations
         
     def _initialize_depth_estimator(self):
-        """Initialize depth foundation model"""
-        try:
-            # Try to load MiDaS model
-            self.depth_estimator = torch.hub.load(
-                "intel-isl/MiDaS", self.config.depth_model, trust_repo=True
-            )
-            self.depth_estimator.eval()
-            print(f"✅ Loaded depth model: {self.config.depth_model}")
-        except Exception as e:
-            print(f"⚠️ Failed to load depth model: {e}")
+        """Initialize depth foundation model with robust error handling"""
+        if not DEPTH_MODELS_AVAILABLE:
+            print("⚠️ Depth models not available, skipping depth integration")
             self.depth_estimator = None
+            return
+            
+        # Try multiple depth models in order of preference
+        depth_models = [self.config.depth_model, "dpt_hybrid_midas", "midas_v3_large"]
+        
+        for model_name in depth_models:
+            try:
+                print(f"📦 Loading depth model: {model_name}")
+                
+                if model_name.startswith("dpt_"):
+                    # Try DPT models via transformers
+                    try:
+                        from transformers import DPTImageProcessor, DPTForDepthEstimation
+                        self.depth_processor = DPTImageProcessor.from_pretrained("Intel/dpt-large")
+                        self.depth_estimator = DPTForDepthEstimation.from_pretrained(
+                            "Intel/dpt-large", torch_dtype=torch.float32
+                        )
+                        if self.depth_estimator is not None:
+                            self.depth_estimator.eval()
+                            self.depth_estimator.to(self.device)
+                        print(f"✅ Loaded DPT depth model: {model_name}")
+                        return
+                    except Exception as dpt_e:
+                        print(f"⚠️ DPT model failed: {dpt_e}")
+                        continue
+                        
+                # Try MiDaS models via torch.hub
+                self.depth_estimator = torch.hub.load(
+                    "intel-isl/MiDaS", model_name, trust_repo=True, force_reload=False
+                )
+                self.depth_estimator.eval()
+                self.depth_estimator.to(self.device)
+                
+                # Apply optimizations if on CUDA
+                if self.config.mixed_precision and self.device.type == "cuda":
+                    try:
+                        self.depth_estimator = self.depth_estimator.half()
+                    except Exception as e:
+                        print(f"⚠️ Depth model mixed precision failed: {e}")
+                
+                print(f"✅ Loaded depth model: {model_name}")
+                return
+                
+            except Exception as e:
+                print(f"⚠️ Depth model {model_name} failed: {e}")
+                continue
+        
+        print("⚠️ All depth models failed, disabling depth integration")
+        self.depth_estimator = None
             
     def estimate_depth(self, image: torch.Tensor) -> torch.Tensor:
-        """Estimate depth using foundation model"""
+        """Estimate depth using foundation model with robust error handling"""
         if self.depth_estimator is None:
             # Return dummy depth if no estimator available
             return torch.ones(image.shape[0], 1, image.shape[2], image.shape[3], 
                             device=image.device, dtype=image.dtype)
             
-        with torch.no_grad():
-            # Prepare input for depth model
-            if image.shape[1] == 3:  # RGB
-                depth_input = image
-            else:
-                depth_input = image[:, :3]  # Take RGB channels
+        try:
+            with torch.no_grad():
+                # Prepare input for depth model
+                if image.shape[1] == 3:  # RGB
+                    depth_input = image
+                else:
+                    depth_input = image[:, :3]  # Take RGB channels
+                    
+                # Handle different model types
+                if hasattr(self, 'depth_processor'):  # DPT model
+                    return self._estimate_depth_dpt(depth_input)
+                else:  # MiDaS model
+                    return self._estimate_depth_midas(depth_input)
+                    
+        except Exception as e:
+            print(f"⚠️ Depth estimation failed: {e}, using dummy depth")
+            return torch.ones(image.shape[0], 1, image.shape[2], image.shape[3], 
+                            device=image.device, dtype=image.dtype)
+    
+    def _estimate_depth_dpt(self, image: torch.Tensor) -> torch.Tensor:
+        """Estimate depth using DPT model"""
+        # Convert to numpy for DPT processor
+        image_np = image.cpu().numpy().transpose(0, 2, 3, 1)  # BHWC
+        
+        batch_depths = []
+        for i in range(image_np.shape[0]):
+            # Process single image
+            img = image_np[i]
+            if img.dtype != np.uint8:
+                img = (img * 255).astype(np.uint8)
                 
-            # Normalize for depth model
-            depth_input = F.interpolate(depth_input, size=(384, 384), mode='bilinear', align_corners=False)
-            depth_input = (depth_input - 0.485) / 0.229  # ImageNet normalization
-            
-            # Estimate depth
-            depth = self.depth_estimator(depth_input)
-            
+            # DPT processing
+            if self.depth_processor is not None and self.depth_estimator is not None:
+                inputs = self.depth_processor(images=img, return_tensors="pt")
+                inputs = {k: v.to(self.device) for k, v in inputs.items()}
+                
+                with torch.no_grad():
+                    outputs = self.depth_estimator(**inputs)
+                    predicted_depth = outputs.predicted_depth
+            else:
+                # Fallback if processors not available
+                return torch.ones(image.shape[0], 1, image.shape[2], image.shape[3], 
+                                device=image.device, dtype=image.dtype)
+                
             # Resize to match input
-            depth = F.interpolate(depth.unsqueeze(1), size=image.shape[2:], 
-                                mode='bilinear', align_corners=False)
+            depth = F.interpolate(
+                predicted_depth.unsqueeze(1), 
+                size=image.shape[2:], 
+                mode='bilinear', 
+                align_corners=False
+            )
+            batch_depths.append(depth)
+            
+        return torch.cat(batch_depths, dim=0)
+    
+    def _estimate_depth_midas(self, image: torch.Tensor) -> torch.Tensor:
+        """Estimate depth using MiDaS model"""
+        # Normalize for MiDaS model
+        depth_input = F.interpolate(image, size=(384, 384), mode='bilinear', align_corners=False)
+        
+        # Apply ImageNet normalization
+        mean = torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1).to(image.device)
+        std = torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1).to(image.device)
+        depth_input = (depth_input - mean) / std
+        
+        # Estimate depth
+        if self.depth_estimator is not None:
+            depth = self.depth_estimator(depth_input)
+        else:
+            # Fallback depth
+            return torch.ones(image.shape[0], 1, image.shape[2], image.shape[3], 
+                            device=image.device, dtype=image.dtype)
+        
+        # Handle different output formats
+        if isinstance(depth, dict):
+            depth = depth.get('predicted_depth', depth.get('depth', list(depth.values())[0]))
+        
+        # Ensure proper dimensions
+        if len(depth.shape) == 3:  # [B, H, W] -> [B, 1, H, W]
+            depth = depth.unsqueeze(1)
+            
+        # Resize to match input
+        depth = F.interpolate(depth, size=image.shape[2:], mode='bilinear', align_corners=False)
             
         return depth
         
@@ -621,7 +819,7 @@ class FlowSeekEngine(nn.Module):
         self,
         image1: torch.Tensor,
         image2: torch.Tensor,
-        iters: int = None,
+        iters: Optional[int] = None,
         flow_init: Optional[torch.Tensor] = None,
         test_mode: bool = False
     ) -> Union[List[torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]:
@@ -654,7 +852,7 @@ class FlowSeekEngine(nn.Module):
             return self._sea_raft_forward(image1, image2, iters, flow_init, test_mode)
         
         # Full FlowSeek processing for complex scenes
-        with autocast(enabled=self.config.mixed_precision, device_type=self.config.device):
+        with autocast(enabled=self.config.mixed_precision):
             # Estimate depth maps
             depth1 = self.estimate_depth(image1) if self.config.depth_integration else None
             depth2 = self.estimate_depth(image2) if self.config.depth_integration else None
@@ -687,7 +885,7 @@ class FlowSeekEngine(nn.Module):
             # Sample correlation at current coordinates
             corr_sample = self._sample_correlation_pyramid(corr_pyramid, coords1)
             
-            with autocast(enabled=self.config.mixed_precision, device_type=self.config.device):
+            with autocast(enabled=self.config.mixed_precision):
                 # Motion basis decomposition
                 if itr > 0:  # Skip first iteration
                     motion_field, motion_params, decomp_info = self.motion_decomposer(
@@ -705,7 +903,8 @@ class FlowSeekEngine(nn.Module):
             coords1 = coords1 + delta_flow
             
             # Upsample flow to original resolution
-            flow_up = self._upsample_flow(coords1 - coords0, image1.shape[2:])
+            target_shape = tuple(image1.shape[2:])  # Convert Size to tuple
+            flow_up = self._upsample_flow(coords1 - coords0, target_shape)
             flow_predictions.append(flow_up)
             
         if test_mode:
@@ -725,7 +924,7 @@ class FlowSeekEngine(nn.Module):
         print("🚀 Using SEA-RAFT mode for simple scene")
         
         # Simplified feature extraction without depth
-        with autocast(enabled=self.config.mixed_precision, device_type=self.config.device):
+        with autocast(enabled=self.config.mixed_precision):
             fmap1 = self.fnet(image1, None)
             fmap2 = self.fnet(image2, None)
             
@@ -750,17 +949,22 @@ class FlowSeekEngine(nn.Module):
             
             corr_sample = self._sample_correlation_pyramid(corr_pyramid, coords1)
             
-            with autocast(enabled=self.config.mixed_precision, device_type=self.config.device):
+            with autocast(enabled=self.config.mixed_precision):
                 net, delta_flow = self.update_block(
                     net, inp, corr_sample, current_flow, None  # No motion basis
                 )
                 
             coords1 = coords1 + delta_flow
-            flow_up = self._upsample_flow(coords1 - coords0, image1.shape[2:])
+            target_shape = tuple(image1.shape[2:])  # Convert Size to tuple
+            flow_up = self._upsample_flow(coords1 - coords0, target_shape)
             flow_predictions.append(flow_up)
             
         if test_mode:
-            return coords1 - coords0, flow_up
+            if len(flow_predictions) > 0:
+                return coords1 - coords0, flow_predictions[-1]
+            else:
+                # Fallback if no predictions generated
+                return coords1 - coords0, coords1 - coords0
             
         return flow_predictions
     
@@ -830,7 +1034,7 @@ def create_flowseek_engine(
     )
     
     engine = FlowSeekEngine(config)
-    engine = engine.to(device)
+    # FlowSeek engine doesn't need explicit .to() call since models are handled internally
     
     # Apply optimizations
     if compile_model and hasattr(torch, 'compile'):

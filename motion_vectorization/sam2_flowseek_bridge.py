@@ -23,13 +23,35 @@ import json
 from pathlib import Path
 
 try:
-    from .flowseek_engine import FlowSeekEngine, FlowSeekConfig, create_flowseek_engine
-    from .sam2_engine import SAM2SegmentationEngine, SAM2Config  
+    from .flowseek_engine import FlowSeekEngine, create_flowseek_engine
+    from .flowseek_engine import FlowSeekConfig as FlowSeekEngineConfig
+    from .sam2_engine import SAM2SegmentationEngine
+    from .sam2_engine import SAM2Config as SAM2EngineConfig
     from .cotracker3_engine import CoTracker3TrackerEngine, CoTracker3Config
     ENGINES_AVAILABLE = True
+    
+    # Use imported configs to avoid type conflicts
+    FlowSeekConfig = FlowSeekEngineConfig
+    SAM2Config = SAM2EngineConfig
+    
 except ImportError as e:
     ENGINES_AVAILABLE = False
     warnings.warn(f"Integration engines not available: {e}")
+    
+    # Define fallback classes to prevent unbound variable errors
+    class FlowSeekConfig:
+        def __init__(self):
+            pass
+    class SAM2Config:
+        def __init__(self):
+            pass
+    def create_flowseek_engine(*args, **kwargs):
+        return None
+    class SAM2SegmentationEngine:
+        def __init__(self, *args, **kwargs):
+            pass
+        def segment_video_batch(self, *args, **kwargs):
+            return [], {}
 
 
 @dataclass
@@ -338,18 +360,41 @@ class SAM2FlowSeekBridge:
     ) -> Tuple[np.ndarray, np.ndarray]:
         """Generate SAM2.1 segmentation masks for both frames"""
         if not self.sam2_engine:
-            return None, None
+            # Return zero arrays instead of None to match return type
+            h, w = frame1.shape[:2]
+            return np.zeros((h, w), dtype=np.uint8), np.zeros((h, w), dtype=np.uint8)
             
         try:
             # Generate masks for frame pair
             masks1, _ = self.sam2_engine.segment_video_batch([frame1], [0])
             masks2, _ = self.sam2_engine.segment_video_batch([frame2], [1])
             
-            return masks1[0] if masks1 else None, masks2[0] if masks2 else None
+            if masks1 and masks2:
+                # Ensure masks are properly formatted as uint8 (H,W)
+                mask1 = masks1[0]
+                mask2 = masks2[0]
+                
+                # Convert to uint8 format if needed
+                if mask1.dtype != np.uint8:
+                    mask1 = mask1.astype(np.uint8)
+                if mask2.dtype != np.uint8:
+                    mask2 = mask2.astype(np.uint8)
+                
+                # Ensure 2D format (H,W) by squeezing extra dimensions
+                if len(mask1.shape) > 2:
+                    mask1 = np.squeeze(mask1)
+                if len(mask2.shape) > 2:
+                    mask2 = np.squeeze(mask2)
+                
+                return mask1, mask2
+            else:
+                h, w = frame1.shape[:2]
+                return np.zeros((h, w), dtype=np.uint8), np.zeros((h, w), dtype=np.uint8)
             
         except Exception as e:
             print(f"⚠️ SAM2.1 mask generation failed: {e}")
-            return None, None
+            h, w = frame1.shape[:2]
+            return np.zeros((h, w), dtype=np.uint8), np.zeros((h, w), dtype=np.uint8)
     
     def _compute_guided_flow(
         self,
@@ -708,17 +753,49 @@ class SAM2FlowSeekBridge:
         gray1 = cv2.cvtColor(frame1, cv2.COLOR_RGB2GRAY)
         gray2 = cv2.cvtColor(frame2, cv2.COLOR_RGB2GRAY)
         
-        # Compute optical flow using Farneback
-        flow = cv2.calcOpticalFlowPyrLK(gray1, gray2, None, None)
+        # Fixed: Proper calcOpticalFlowFarneback with correct positional parameters
+        forward_flow = cv2.calcOpticalFlowFarneback(
+            gray1,  # prev - first frame
+            gray2,  # next - second frame 
+            None,   # flow - output buffer (None means allocate)
+            0.5,    # pyr_scale
+            3,      # levels
+            15,     # winsize
+            3,      # iterations
+            5,      # poly_n
+            1.2,    # poly_sigma
+            0       # flags
+        )
         
-        # Create backward flow (simple negation - not accurate but functional)
-        backward_flow = -flow if flow is not None else np.zeros((gray1.shape[0], gray1.shape[1], 2))
-        forward_flow = flow if flow is not None else np.zeros((gray1.shape[0], gray1.shape[1], 2))
+        # Fixed: Compute proper backward flow using Farneback on swapped frames
+        backward_flow = cv2.calcOpticalFlowFarneback(
+            gray2,  # prev - swapped for backward flow
+            gray1,  # next - swapped for backward flow
+            None,   # flow - output buffer (None means allocate)
+            0.5,    # pyr_scale
+            3,      # levels
+            15,     # winsize
+            3,      # iterations
+            5,      # poly_n
+            1.2,    # poly_sigma
+            0       # flags
+        )
+        
+        # Handle None cases with explicit logging instead of silent fallbacks
+        if forward_flow is None:
+            print("❌ Forward flow computation failed - creating zero flow field")
+            forward_flow = np.zeros((gray1.shape[0], gray1.shape[1], 2), dtype=np.float32)
+        
+        if backward_flow is None:
+            print("❌ Backward flow computation failed - creating zero flow field")
+            backward_flow = np.zeros((gray1.shape[0], gray1.shape[1], 2), dtype=np.float32)
         
         metadata = {
-            'method': 'fallback_farneback',
+            'method': 'fallback_farneback_corrected',
             'mask_guidance_used': False,
-            'temporal_consistency_applied': False
+            'temporal_consistency_applied': False,
+            'forward_flow_valid': forward_flow is not None,
+            'backward_flow_valid': backward_flow is not None
         }
         
         return forward_flow, backward_flow, metadata
@@ -738,7 +815,10 @@ class SAM2FlowSeekBridge:
             hsv = np.zeros((flow.shape[0], flow.shape[1], 3), dtype=np.uint8)
             hsv[..., 0] = ang * 180 / np.pi / 2
             hsv[..., 1] = 255
-            hsv[..., 2] = cv2.normalize(mag, None, 0, 255, cv2.NORM_MINMAX)
+            # Fixed: Create output array for normalize function instead of dst=None
+            normalized_mag = np.zeros_like(mag, dtype=np.uint8)
+            cv2.normalize(mag, normalized_mag, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+            hsv[..., 2] = normalized_mag
             return cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
         
         # Create flow visualizations

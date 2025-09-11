@@ -120,9 +120,28 @@ class SAM2CoTrackerBridge:
         
         # Step 1: SAM2.1 Segmentation
         print("🔍 Step 1: SAM2.1 Segmentation...")
-        segmentation_results = self.sam2_engine.segment_video(
-            video, prompts=prompts
+        # Convert video tensor to list of frames for batch processing
+        frames_list = []
+        frame_indices = []
+        for t in range(T):
+            frame = video[0, t].permute(1, 2, 0).cpu().numpy()
+            frames_list.append(frame)
+            frame_indices.append(t)
+        
+        masks_list, metadata = self.sam2_engine.segment_video_batch(
+            frames_list, frame_indices, prompts
         )
+        
+        # Convert back to tensor format
+        if masks_list:
+            masks = torch.stack([torch.from_numpy(mask) for mask in masks_list], dim=1).unsqueeze(0)
+        else:
+            masks = torch.zeros(B, T, H, W, dtype=torch.long)
+        
+        segmentation_results = {
+            'masks': masks,
+            'metadata': metadata
+        }
         
         masks = segmentation_results['masks']  # (B, T, H, W)
         object_ids = segmentation_results.get('object_ids', [])
@@ -198,7 +217,7 @@ class SAM2CoTrackerBridge:
                 continue
                 
             # Extract contour from first visible frame
-            first_frame_idx = visible_frames[0, 1].item()
+            first_frame_idx = int(visible_frames[0, 1].item())
             first_mask = obj_mask[0, first_frame_idx].cpu().numpy().astype(np.uint8) * 255
             
             # Extract and refine contour points
@@ -498,6 +517,7 @@ class SAM2CoTrackerBridge:
         B, T, N, _ = tracks.shape
         
         deformation_metrics = {}
+        reference_distances = None
         
         # Calculate inter-point distances for deformation analysis
         for t in range(T):
@@ -515,7 +535,7 @@ class SAM2CoTrackerBridge:
                 deformation_metrics['reference_distances'] = reference_distances
             else:
                 # Compare with reference to detect deformation
-                if distances.shape == reference_distances.shape:
+                if reference_distances is not None and distances.shape == reference_distances.shape:
                     relative_change = (distances - reference_distances) / (reference_distances + 1e-6)
                     deformation_magnitude = torch.mean(torch.abs(relative_change))
                     
@@ -632,19 +652,21 @@ class SAM2CoTrackerBridge:
                                     # Interpolate
                                     if param_tensor.dim() == 3:
                                         valid_values = param_tensor[b, valid_indices, dim]
-                                        interp_values = torch.interp(
-                                            outlier_indices.float(),
-                                            valid_indices.float(),
-                                            valid_values
-                                        )
+                                        interp_values = torch.nn.functional.interpolate(
+                                            valid_values.unsqueeze(0).unsqueeze(0),
+                                            size=len(outlier_indices),
+                                            mode='linear',
+                                            align_corners=True
+                                        ).squeeze()
                                         corrected_tensor[b, outlier_indices, dim] = interp_values
                                     else:
                                         valid_values = param_tensor[b, valid_indices]
-                                        interp_values = torch.interp(
-                                            outlier_indices.float(),
-                                            valid_indices.float(),
-                                            valid_values
-                                        )
+                                        interp_values = torch.nn.functional.interpolate(
+                                            valid_values.unsqueeze(0).unsqueeze(0),
+                                            size=len(outlier_indices),
+                                            mode='linear',
+                                            align_corners=True
+                                        ).squeeze()
                                         corrected_tensor[b, outlier_indices] = interp_values
                     
                     corrected_data[f'{param_name}_corrected'] = corrected_tensor

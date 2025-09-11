@@ -332,7 +332,8 @@ def main():
     curr_fg_comps_vis = viz.show_labels(curr_fg_comps + 1)
     curr_fg_comp_to_label, curr_fg_label_to_comp = get_comp_label_map(curr_fg_comps, curr_fg_labels)
     # Write visualization with proper array format
-    cv2.imwrite(os.path.join(debug_comp_folder, f'{frame_idx:03d}.png'), curr_fg_comps_vis)
+    if curr_fg_comps_vis is not None:
+      cv2.imwrite(os.path.join(debug_comp_folder, f'{frame_idx:03d}.png'), np.ascontiguousarray(curr_fg_comps_vis, dtype=np.uint8))
 
     frame_height, frame_width, _ = curr_frame.shape
     frame_lab = cv2.cvtColor(cv2.bilateralFilter(curr_frame, 9, 25, 25), cv2.COLOR_BGR2LAB)
@@ -340,6 +341,7 @@ def main():
     # Fix: Ensure lab_mode has 3 channels for LAB2BGR conversion
     lab_mode_3ch = np.uint8(np.array(lab_mode)[None, None, :])  # Shape: (1, 1, 3)
     # Convert to proper OpenCV format for cvtColor
+    lab_mode_3ch = np.ascontiguousarray(lab_mode_3ch, dtype=np.uint8)
     bgr_mode = cv2.cvtColor(lab_mode_3ch, cv2.COLOR_LAB2BGR).squeeze()
     if t <= args.base_frame:
       time_bank['bgr'].insert(0, bgr_mode)
@@ -392,17 +394,28 @@ def main():
       prev_shapes = []
       prev_centroids = []
       for prev_shape_idx in active_shapes:
-        prev_shape = shape_bank[prev_shape_idx]
-        if optim_bank[prev_shape_idx] is not None and 'centroid' in optim_bank[prev_shape_idx]:
-          cx, cy = optim_bank[prev_shape_idx]['centroid']
-          prev_centroids.append([cx / frame_width, cy / frame_height])
+        prev_shape = shape_bank.get(prev_shape_idx) if shape_bank is not None else None
+        optim_data = optim_bank.get(prev_shape_idx) if optim_bank is not None else None
+        if optim_data is not None and isinstance(optim_data, dict) and 'centroid' in optim_data:
+          centroid_data = optim_data['centroid']
+          if centroid_data is not None and len(centroid_data) >= 2:
+            cx, cy = centroid_data[:2]
+            prev_centroids.append([cx / frame_width, cy / frame_height])
+          else:
+            prev_centroids.append([0.5, 0.5])
         else:
           # Fallback centroid if not available
           prev_centroids.append([0.5, 0.5])
         
-        if prev_shape is not None and len(prev_shape.shape) >= 3:
-          min_x, min_y, max_x, max_y = get_shape_coords(shape_bank[prev_shape_idx][:, :, 3])
-          prev_shapes.append(prev_shape[min_y:max_y, min_x:max_x])
+        if prev_shape is not None and hasattr(prev_shape, 'shape') and len(prev_shape.shape) >= 3:
+          try:
+            if prev_shape.shape[2] > 3:
+              min_x, min_y, max_x, max_y = get_shape_coords(prev_shape[:, :, 3])
+              prev_shapes.append(prev_shape[min_y:max_y, min_x:max_x])
+            else:
+              prev_shapes.append(np.zeros((10, 10, 4), dtype=np.uint8))
+          except (IndexError, AttributeError):
+            prev_shapes.append(np.zeros((10, 10, 4), dtype=np.uint8))
         else:
           # Fallback shape if not available
           prev_shapes.append(np.zeros((10, 10, 4), dtype=np.uint8))
@@ -566,16 +579,27 @@ def main():
         unmatched_prev_centroids = []
         for i in unmatched_prev:
           prev_shape_idx = active_shapes[i]
-          unmatched_prev_shape = shape_bank[prev_shape_idx]
-          if optim_bank[prev_shape_idx] is not None and 'centroid' in optim_bank[prev_shape_idx]:
-            cx, cy = optim_bank[prev_shape_idx]['centroid']
-            unmatched_prev_centroids.append([cx / frame_width, cy / frame_height])
+          unmatched_prev_shape = shape_bank.get(prev_shape_idx) if shape_bank is not None else None
+          optim_data = optim_bank.get(prev_shape_idx) if optim_bank is not None else None
+          if optim_data is not None and isinstance(optim_data, dict) and 'centroid' in optim_data:
+            centroid_data = optim_data['centroid']
+            if centroid_data is not None and len(centroid_data) >= 2:
+              cx, cy = centroid_data[:2]
+              unmatched_prev_centroids.append([cx / frame_width, cy / frame_height])
+            else:
+              unmatched_prev_centroids.append([0.5, 0.5])
           else:
             unmatched_prev_centroids.append([0.5, 0.5])
           
-          if unmatched_prev_shape is not None and len(unmatched_prev_shape.shape) >= 3:
-            min_x, min_y, max_x, max_y = get_shape_coords(shape_bank[prev_shape_idx][:, :, 3])
-            unmatched_prev_shapes.append(unmatched_prev_shape[min_y:max_y, min_x:max_x])
+          if unmatched_prev_shape is not None and hasattr(unmatched_prev_shape, 'shape') and len(unmatched_prev_shape.shape) >= 3:
+            try:
+              if unmatched_prev_shape.shape[2] > 3:
+                min_x, min_y, max_x, max_y = get_shape_coords(unmatched_prev_shape[:, :, 3])
+                unmatched_prev_shapes.append(unmatched_prev_shape[min_y:max_y, min_x:max_x])
+              else:
+                unmatched_prev_shapes.append(np.zeros((10, 10, 4), dtype=np.uint8))
+            except (IndexError, AttributeError):
+              unmatched_prev_shapes.append(np.zeros((10, 10, 4), dtype=np.uint8))
           else:
             unmatched_prev_shapes.append(np.zeros((10, 10, 4), dtype=np.uint8))
         unmatched_curr_shapes = []
@@ -750,8 +774,9 @@ def main():
               i = from_labels.index(shape_idx)
               if len(match_dict[i]) < 1:  # If this shape doesn't have a match, skip.
                 continue
-              if np.trace(init_bank[shape_idx]['h']) > 0:
-                _, _, sx0, sy0, theta0, kx0 = decompose(init_bank[shape_idx]['h'])
+              init_data = init_bank.get(shape_idx) if init_bank is not None else None
+              if init_data is not None and 'h' in init_data and np.trace(init_data['h']) > 0:
+                _, _, sx0, sy0, theta0, kx0 = decompose(init_data['h'])
               else:
                 sx0, sy0, theta0, kx0 = 1.0, 1.0, 0.0, 0.0
               sx_init.append(sx0)
@@ -760,7 +785,9 @@ def main():
               kx_init.append(kx0)
               ky_init.append(0)
               element_labels.append(shape_idx)
-              shape_crop = shape_crops[shape_idx]
+              shape_crop = shape_crops.get(shape_idx) if shape_crops is not None else None
+              if shape_crop is None:
+                continue
               elements.append(shape_crop)
               shape_mask = np.uint8(from_fg_labels==shape_idx)
               shape_coords = np.stack(np.where(shape_mask>0), axis=1)[:, ::-1]  # x, y
@@ -772,18 +799,26 @@ def main():
               idxs = np.arange(0, shape_coords.shape[0], spacing)
               model = AffineTransform()
               # Robustly estimate affine transform model with RANSAC.
-              model, _ = ransac(
-                (shape_coords[idxs, :] - shape_coords_mean, new_shape_coords[idxs, :] - shape_coords_mean), 
-                AffineTransform, min_samples=min(len(idxs), 3),
-                residual_threshold=2, max_trials=100
-              )
+              try:
+                model, _ = ransac(
+                  (shape_coords[idxs, :] - shape_coords_mean, new_shape_coords[idxs, :] - shape_coords_mean), 
+                  AffineTransform, min_samples=min(len(idxs), 3),
+                  residual_threshold=2, max_trials=100
+                )
+              except (ValueError, np.linalg.LinAlgError):
+                model = None
+                
               if args.all_joint:
                 if len(match_dict[i]) == 1 and len(other_match_dict[match_dict[i][0]]) == 1 and other_match_dict[match_dict[i][0]][0] == i:
                   best_match = match_dict[i][np.argmax(joint_score[i][match_dict[i]])]
                   best_flow_match = match_dict[i][np.argmax(init_score[i][match_dict[i]])]
                   if best_match == best_flow_match:
-                    sx, sy = model.scale
-                    theta = model.rotation
+                    if model is not None and hasattr(model, 'scale') and hasattr(model, 'rotation'):
+                      sx, sy = model.scale
+                      theta = model.rotation
+                    else:
+                      sx, sy = 1.0, 1.0
+                      theta = 0.0
                   else:
                     target_crop = target_crops[best_match] / 255.0
                     min_x = np.min(shape_coords[:, 0])
@@ -795,15 +830,23 @@ def main():
                       shape_crop / 255.0, target_crop, theta_init[-1], bg_crop, over_mask=np.zeros_like(target_crop[:, :, 3]), p_weight=0.0)
                     theta = np.deg2rad(-theta)
                 else:
+                  if model is not None and hasattr(model, 'scale') and hasattr(model, 'rotation'):
+                    sx, sy = model.scale
+                    sx *= sx_init[-1]
+                    sy *= sy_init[-1]
+                    theta = model.rotation
+                  else:
+                    sx, sy = sx_init[-1], sy_init[-1]
+                    theta = 0.0
+              else:
+                if model is not None and hasattr(model, 'scale') and hasattr(model, 'rotation'):
                   sx, sy = model.scale
                   sx *= sx_init[-1]
                   sy *= sy_init[-1]
                   theta = model.rotation
-              else:
-                sx, sy = model.scale
-                sx *= sx_init[-1]
-                sy *= sy_init[-1]
-                theta = model.rotation
+                else:
+                  sx, sy = sx_init[-1], sy_init[-1]
+                  theta = 0.0
               if args.init_s:
                 sx_init[-1] = sx
                 sy_init[-1] = sy
@@ -1224,11 +1267,15 @@ def main():
           match_weight = 0.0
           if match_type == 'prev_to_curr':
             for _, u in sub_B.out_edges(prev[0]):
-              match_weight += sub_B[prev[0]][u]['loss']
+              edge_data = sub_B[prev[0]][u] if prev[0] in sub_B and u in sub_B[prev[0]] else {}
+              loss_value = edge_data.get('loss', 0.0) if isinstance(edge_data, dict) else 0.0
+              match_weight += loss_value
             match_weight /= len(sub_B.out_edges(prev[0]))
           if match_type == 'curr_to_prev':
             for _, u in sub_B.out_edges(curr[0]):
-              match_weight += sub_B[curr[0]][u]['loss']
+              edge_data = sub_B[curr[0]][u] if curr[0] in sub_B and u in sub_B[curr[0]] else {}
+              loss_value = edge_data.get('loss', 0.0) if isinstance(edge_data, dict) else 0.0
+              match_weight += loss_value
             match_weight /= len(sub_B.out_edges(curr[0]))
 
           if match_weight > args.drop_thresh:
@@ -1507,7 +1554,7 @@ def main():
                 continue
               del prev_to_curr[active_shapes.index(prev_shape_idx)]
               if prev_shape_idx in merged:
-                merged[canonical_pl] = merged[canonical_pl].union(merged[i])
+                merged[canonical_pl] = merged[canonical_pl].union(merged[prev_shape_idx])
                 del merged[prev_shape_idx]
               merged[canonical_pl].add(prev_shape_idx)
             curr_to_prev[curr_shape_idx] = [canonical_pl]
@@ -1572,9 +1619,9 @@ def main():
             at_edge_x = min_x < 3 or max_x >= curr_frame.shape[1] - 3
             at_edge_y = min_y < 3 or max_y >= curr_frame.shape[0] - 3
             occluded = len(curr_fg_comp_to_label[curr_fg_label_to_comp[curr_shape_idx]]) > 1
-            print(f'Prev shape {prev_shape_idx} occluded:', (not unoccluded_canon[prev_shape_idx]))
+            print(f'Prev shape {canonical_pl} occluded:', (not unoccluded_canon.get(canonical_pl, True)))
             highest_res[canonical_pl] = shape[min_y:max_y, min_x:max_x]
-            highest_res_update[prev_shape_idx] = True
+            highest_res_update[canonical_pl] = True
             unoccluded_canon[canonical_pl] = not (at_edge_x or at_edge_y) and not occluded
 
       if len(all_mappings_vis) > 0:
@@ -1593,8 +1640,9 @@ def main():
     # Remove all pixels already taken into account by tracking.
     curr_fg_labels[new_fg_labels>=0] = -1
     remaining_fg_bg = np.uint8(curr_fg_labels>=0)
-    kernel = np.ones((5, 5),np. uint8)
-    remaining_fg_bg = cv2.morphologyEx(remaining_fg_bg, cv2.MORPH_OPEN, kernel)
+    kernel = np.ones((5, 5), np.uint8)
+    remaining_fg_bg_arr = np.ascontiguousarray(remaining_fg_bg, dtype=np.uint8)
+    remaining_fg_bg = cv2.morphologyEx(remaining_fg_bg_arr, cv2.MORPH_OPEN, kernel)
     curr_fg_labels[remaining_fg_bg==0] = -1
     cv2.imwrite(os.path.join(debug_fgbg_folder, f'{frame_idx:03d}.png'), 255 * remaining_fg_bg)
 

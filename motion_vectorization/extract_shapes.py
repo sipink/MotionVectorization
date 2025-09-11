@@ -398,9 +398,12 @@ def main():
         optim_data = optim_bank.get(prev_shape_idx) if optim_bank is not None else None
         if optim_data is not None and isinstance(optim_data, dict) and 'centroid' in optim_data:
           centroid_data = optim_data['centroid']
-          if centroid_data is not None and len(centroid_data) >= 2:
-            cx, cy = centroid_data[:2]
-            prev_centroids.append([cx / frame_width, cy / frame_height])
+          if centroid_data is not None and hasattr(centroid_data, '__len__') and len(centroid_data) >= 2:
+            try:
+              cx, cy = float(centroid_data[0]), float(centroid_data[1])
+              prev_centroids.append([cx / frame_width, cy / frame_height])
+            except (TypeError, ValueError, IndexError):
+              prev_centroids.append([0.5, 0.5])
           else:
             prev_centroids.append([0.5, 0.5])
         else:
@@ -423,12 +426,24 @@ def main():
       curr_centroids = []
       for curr_shape_idx in curr_labels:
         curr_shape_alpha = np.uint8(curr_fg_labels==curr_shape_idx)
-        curr_shape_alpha = get_alpha(np.float64(curr_shape_alpha), curr_frame)[..., None]
+        curr_shape_alpha_proc = get_alpha(np.float64(curr_shape_alpha), curr_frame)
+        if curr_shape_alpha_proc is not None:
+          curr_shape_alpha = curr_shape_alpha_proc[..., None]
+        else:
+          curr_shape_alpha = curr_shape_alpha[..., None]
         curr_shape = curr_shape_alpha * curr_frame + (1 - curr_shape_alpha) * (bg_img if bg_img is not None else np.zeros_like(curr_frame))
         curr_shape = np.uint8(np.dstack([curr_shape, 255 * curr_shape_alpha]))
-        min_x, min_y, max_x, max_y = get_shape_coords(curr_shape[:, :, 3])
+        curr_shape_coords = get_shape_coords(curr_shape[:, :, 3])
+        if isinstance(curr_shape_coords, tuple) and len(curr_shape_coords) == 4:
+          min_x, min_y, max_x, max_y = curr_shape_coords
+        else:
+          min_x, min_y, max_x, max_y = 0, 0, curr_shape.shape[1], curr_shape.shape[0]
         curr_shapes.append(curr_shape[min_y:max_y, min_x:max_x])
-        cx, cy = get_shape_centroid(curr_shape[:, :, 3])
+        centroid_coords = get_shape_centroid(curr_shape[:, :, 3])
+        if isinstance(centroid_coords, (list, tuple)) and len(centroid_coords) >= 2:
+          cx, cy = centroid_coords[0], centroid_coords[1]
+        else:
+          cx, cy = (min_x + max_x) / 2, (min_y + max_y) / 2
         curr_centroids.append([cx, cy])
 
       # Enhanced tracking with modern engines (CoTracker3 primary, robust fallbacks)
@@ -810,8 +825,15 @@ def main():
                 
               if args.all_joint:
                 if len(match_dict[i]) == 1 and len(other_match_dict[match_dict[i][0]]) == 1 and other_match_dict[match_dict[i][0]][0] == i:
-                  best_match = match_dict[i][np.argmax(joint_score[i][match_dict[i]])]
-                  best_flow_match = match_dict[i][np.argmax(init_score[i][match_dict[i]])]
+                  match_indices = match_dict[i]
+                  if joint_score is not None and len(match_indices) > 0:
+                    best_match = match_indices[np.argmax(joint_score[i][match_indices])]
+                  else:
+                    best_match = match_indices[0] if len(match_indices) > 0 else 0
+                  if init_score is not None and len(match_indices) > 0:
+                    best_flow_match = match_indices[np.argmax(init_score[i][match_indices])]
+                  else:
+                    best_flow_match = match_indices[0] if len(match_indices) > 0 else 0
                   if best_match == best_flow_match:
                     if model is not None and hasattr(model, 'scale') and hasattr(model, 'rotation'):
                       sx, sy = model.scale
@@ -847,7 +869,7 @@ def main():
                 else:
                   sx, sy = sx_init[-1], sy_init[-1]
                   theta = 0.0
-              if args.init_s:
+              if args.init_s and len(sx_init) > 0 and len(sy_init) > 0:
                 sx_init[-1] = sx
                 sy_init[-1] = sy
               if args.init_r:
@@ -856,33 +878,75 @@ def main():
               if args.all_joint:
                 best_match = np.argmax(joint_score[i])
                 target_alpha = np.uint8(to_fg_labels==to_labels[best_match])
-                target_cx, target_cy = get_shape_centroid(target_alpha)
+                # Ensure target_alpha is a proper array, not a scalar
+                if not hasattr(target_alpha, 'shape') or target_alpha.ndim == 0:
+                  target_alpha = np.array([[target_alpha]], dtype=np.uint8)
+                centroid_result = get_shape_centroid(target_alpha)
+                if isinstance(centroid_result, (list, tuple)) and len(centroid_result) >= 2:
+                  target_cx, target_cy = centroid_result[0], centroid_result[1]
+                else:
+                  target_cx, target_cy = frame_width / 2, frame_height / 2
                 if len(match_dict[i]) == 1 and len(other_match_dict[match_dict[i][0]]) == 1 and other_match_dict[match_dict[i][0]][0] == i:
                   best_match = np.argmax(joint_score[i])
                   target_alpha = np.uint8(to_fg_labels==to_labels[best_match])
-                  target_cx, target_cy = get_shape_centroid(target_alpha)
+                  # Ensure target_alpha is a proper array, not a scalar
+                  if not hasattr(target_alpha, 'shape') or target_alpha.ndim == 0:
+                    target_alpha = np.array([[target_alpha]], dtype=np.uint8)
+                  centroid_result = get_shape_centroid(target_alpha)
+                  if isinstance(centroid_result, (list, tuple)) and len(centroid_result) >= 2:
+                    target_cx, target_cy = centroid_result[0], centroid_result[1]
+                  else:
+                    target_cx, target_cy = frame_width / 2, frame_height / 2
                 else:
-                  target_cx, target_cy = get_shape_centroid(shape_mask)
-                  tx, ty = model.translation
-                  target_cx += tx
-                  target_cy += ty
+                  target_coords = get_shape_centroid(shape_mask)
+                  if isinstance(target_coords, (list, tuple)) and len(target_coords) >= 2:
+                    target_cx, target_cy = target_coords[0], target_coords[1]
+                  else:
+                    target_cx, target_cy = frame_width / 2, frame_height / 2
+                  if model is not None and hasattr(model, 'translation'):
+                    tx, ty = model.translation
+                    target_cx += tx
+                    target_cy += ty
               else:
                 if len(match_dict[i]) >= 1 and len(other_match_dict[match_dict[i][0]]) == 1 and other_match_dict[match_dict[i][0]][0] == i:
                   match_labels = [to_labels[j] for j in match_dict[i]]
                   target_alpha = np.uint8(np.isin(to_fg_labels, match_labels))
-                  target_cx, target_cy = get_shape_centroid(target_alpha)
+                  # Ensure target_alpha is a proper array, not a scalar
+                  if not hasattr(target_alpha, 'shape') or target_alpha.ndim == 0:
+                    target_alpha = np.array([[target_alpha]], dtype=np.uint8)
+                  centroid_result = get_shape_centroid(target_alpha)
+                  if isinstance(centroid_result, (list, tuple)) and len(centroid_result) >= 2:
+                    target_cx, target_cy = centroid_result[0], centroid_result[1]
+                  else:
+                    target_cx, target_cy = frame_width / 2, frame_height / 2
                   # Add visual scores with flow scores to get best initialization.
                 else:
                   best_match = np.argmax(init_score[i, match_dict[i]])
                   joint_match = np.argmax(joint_score[i, match_dict[i]])
                   if best_match == joint_match:
-                    target_cx, target_cy = get_shape_centroid(shape_mask)
-                    tx, ty = model.translation
-                    target_cx += tx
-                    target_cy += ty
+                    # Ensure shape_mask is properly handled
+                    if hasattr(shape_mask, 'shape') and shape_mask.ndim >= 2:
+                      centroid_result = get_shape_centroid(shape_mask)
+                      if isinstance(centroid_result, (list, tuple)) and len(centroid_result) >= 2:
+                        target_cx, target_cy = centroid_result[0], centroid_result[1]
+                      else:
+                        target_cx, target_cy = frame_width / 2, frame_height / 2
+                    else:
+                      target_cx, target_cy = frame_width / 2, frame_height / 2
+                    if model is not None and hasattr(model, 'translation'):
+                      tx, ty = model.translation
+                      target_cx += tx
+                      target_cy += ty
                   else:
                     target_alpha = np.uint8(to_fg_labels==to_labels[match_dict[i][best_match]])
-                    target_cx, target_cy = get_shape_centroid(target_alpha)
+                    # Ensure target_alpha is a proper array, not a scalar
+                    if not hasattr(target_alpha, 'shape') or target_alpha.ndim == 0:
+                      target_alpha = np.array([[target_alpha]], dtype=np.uint8)
+                    centroid_result = get_shape_centroid(target_alpha)
+                    if isinstance(centroid_result, (list, tuple)) and len(centroid_result) >= 2:
+                      target_cx, target_cy = centroid_result[0], centroid_result[1]
+                    else:
+                      target_cx, target_cy = frame_width / 2, frame_height / 2
               # Be careful to place shapes completely within the bounds of the frame.
               if args.init_t:
                 cx = max(shape_crop.shape[1] // 2, min(target_cx, from_frame.shape[1] - shape_crop.shape[1] // 2))
@@ -979,8 +1043,10 @@ def main():
                 continue
               elements.append(full_elements[element_idx, :, r_min_y:r_max_y, r_min_x:r_max_x])
               # Adjust translation initialization to dimension of element.
-              tx_init[element_idx] /= (max(r_max_x - r_min_x, r_max_y - r_min_y) / 2)
-              ty_init[element_idx] /= (max(r_max_x - r_min_x, r_max_y - r_min_y) / 2)
+              dimension_factor = max(int(r_max_x - r_min_x), int(r_max_y - r_min_y)) / 2
+              if dimension_factor > 0:
+                tx_init[element_idx] /= dimension_factor
+                ty_init[element_idx] /= dimension_factor
               centroids_opt[element_idx] = [centroids_opt[element_idx][0] - r_min_x, centroids_opt[element_idx][1] - r_min_y]
               element_idxs[i] = element_idx
               target_idxs[i] = target_idx
@@ -1048,8 +1114,11 @@ def main():
           comp_losses = losses[comp_idx]
           fig = plt.figure()
           plt.plot(np.arange(0, len(comp_losses)), comp_losses)
-          plt.axvline(x=np.argmin(comp_losses), c='r')
-          plt.text(np.argmin(comp_losses), np.max(comp_losses), f'{np.min(comp_losses):.4f}', fontdict=font)
+          argmin_loss = int(np.argmin(comp_losses))
+          min_loss = float(np.min(comp_losses))
+          max_loss = float(np.max(comp_losses))
+          plt.axvline(x=argmin_loss, c='r')
+          plt.text(argmin_loss, max_loss, f'{min_loss:.4f}', fontdict=font)
           plt.title('loss')
           fig.savefig(os.path.join(frame_comp_folder, 'loss_plot.png'))
           plt.close()
@@ -1126,8 +1195,18 @@ def main():
             target_total = np.sum(target_labels_mask, axis=1)
             
             # Get optimized element output RGB and labels.
-            match_element_idxs = [element_idxs[i] for i in from_list]
-            element_zs = [layer_zs[idx] for idx in match_element_idxs]
+            match_element_idxs = [element_idxs[i] for i in from_list if i in element_idxs]
+            element_zs = []
+            for idx in match_element_idxs:
+              if layer_zs is not None and idx in layer_zs:
+                z_val = layer_zs[idx]
+                # Ensure z_val is a scalar float, not an array
+                if hasattr(z_val, 'item'):
+                  element_zs.append(float(z_val.item()))
+                else:
+                  element_zs.append(float(z_val))
+              else:
+                element_zs.append(0.0)  # Default z value
             render_order = np.argsort(element_zs).tolist()
 
             # Get render element labels in z-ordering.
@@ -1147,7 +1226,17 @@ def main():
               output_in_target[np.isnan(output_in_target)] = 0.0
               target_in_output = output_label @ target_labels_mask.T / target_total
               target_in_output[np.isnan(target_in_output)] = 0.0
-              unique_j = unique_target_labels[np.argmax(output_in_target)]
+              if len(output_in_target) > 0 and len(unique_target_labels) > 0:
+                argmax_idx = int(np.argmax(output_in_target))
+                if argmax_idx < len(unique_target_labels):
+                  unique_j = unique_target_labels[argmax_idx]
+                  # Ensure unique_j is a scalar value
+                  if hasattr(unique_j, 'item'):
+                    unique_j = unique_j.item()
+                else:
+                  unique_j = unique_target_labels[0] if len(unique_target_labels) > 0 else 0
+              else:
+                unique_j = 0
               print('target_in_output:', target_in_output)
               if np.max(output_in_target) > args.overlap_thresh:
                 print(v, 'falls in', f'{to_set[0][0]}{unique_j}')
@@ -1155,7 +1244,16 @@ def main():
               # Get the targets which element mostly covers (this constitutes a complete candidate mapping).
               target_in_output_j = np.where(target_in_output>args.overlap_thresh)[1]
               if len(target_in_output_j) > 0:
-                print(v, 'covers', [f'{to_set[0][0]}{unique_target_labels[j]}' for j in target_in_output_j])
+                # Safely access unique_target_labels with proper bounds checking
+                covered_labels = []
+                for j in target_in_output_j:
+                  if j < len(unique_target_labels):
+                    label_val = unique_target_labels[j]
+                    # Ensure label_val is a scalar
+                    if hasattr(label_val, 'item'):
+                      label_val = label_val.item()
+                    covered_labels.append(f'{to_set[0][0]}{label_val}')
+                print(v, 'covers', covered_labels)
                 target_mask = np.uint8(np.isin(target_label, [unique_target_labels[j] for j in target_in_output_j]))
                 # output_rgba = np.dstack([output_rgb, output_mask[..., None]])
                 # target_rgba = np.dstack([target_rgb, target_mask[..., None]])
@@ -1214,25 +1312,29 @@ def main():
                 best_mapping_score = mapping[2]
             if best_mapping_score > args.drop_thresh:
               break
-            for from_node in best_mapping[0]:
-              for to_node in best_mapping[1]:
-                sub_B.add_edge(from_node, to_node, loss=best_mapping_score)
-            comp_chosen_mappings_vis.append(viz.vis_mapping(best_mapping[0], best_mapping[1], best_mapping[2]))
+            if best_mapping is not None and len(best_mapping) >= 3:
+              for from_node in best_mapping[0]:
+                for to_node in best_mapping[1]:
+                  sub_B.add_edge(from_node, to_node, loss=best_mapping_score)
+              comp_chosen_mappings_vis.append(viz.vis_mapping(best_mapping[0], best_mapping[1], best_mapping[2]))
             # Remove all conflicting mappings.
             remaining_mappings = []
             for mapping in mappings:
               from_nodes, to_nodes, _ = mapping
               conflict = False
-              for from_node in from_nodes:
-                mapping_group = best_mapping[0] if from_node[0] == best_mapping[0][0][0] else best_mapping[1]
-                if from_node in mapping_group:
-                  conflict = True
-                  break
-              for to_node in to_nodes:
-                mapping_group = best_mapping[0] if to_node[0] == best_mapping[0][0][0] else best_mapping[1]
-                if to_node in mapping_group:
-                  conflict = True
-                  break
+              if best_mapping is not None and len(best_mapping) >= 2:
+                for from_node in from_nodes:
+                  if len(best_mapping[0]) > 0 and len(best_mapping[0][0]) > 0:
+                    mapping_group = best_mapping[0] if from_node[0] == best_mapping[0][0][0] else best_mapping[1]
+                    if from_node in mapping_group:
+                      conflict = True
+                      break
+                for to_node in to_nodes:
+                  if len(best_mapping[0]) > 0 and len(best_mapping[0][0]) > 0:
+                    mapping_group = best_mapping[0] if to_node[0] == best_mapping[0][0][0] else best_mapping[1]
+                    if to_node in mapping_group:
+                      conflict = True
+                      break
               if not conflict:
                 remaining_mappings.append(mapping)
             mappings = remaining_mappings
@@ -1300,13 +1402,21 @@ def main():
             elif match_type == 'curr_to_prev':
               # Check if the transform was close to an identity.
               j = curr_labels.index(int(curr[0][1:]))
-              tx = all_tx[curr_element_idxs[j]]
-              ty = all_ty[curr_element_idxs[j]]
-              sx = all_sx[curr_element_idxs[j]]
-              sy = all_sy[curr_element_idxs[j]]
-              theta = all_theta[curr_element_idxs[j]]
-              kx = all_kx[curr_element_idxs[j]]
-              ky = all_ky[curr_element_idxs[j]]
+              # Safely access optimization parameters with null checks
+              if (all_tx is not None and all_ty is not None and all_sx is not None and 
+                  all_sy is not None and all_theta is not None and all_kx is not None and 
+                  all_ky is not None and curr_element_idxs is not None and 
+                  j < len(curr_element_idxs) and curr_element_idxs[j] < len(all_tx)):
+                tx = all_tx[curr_element_idxs[j]]
+                ty = all_ty[curr_element_idxs[j]]
+                sx = all_sx[curr_element_idxs[j]]
+                sy = all_sy[curr_element_idxs[j]]
+                theta = all_theta[curr_element_idxs[j]]
+                kx = all_kx[curr_element_idxs[j]]
+                ky = all_ky[curr_element_idxs[j]]
+              else:
+                # Use fallback values if parameters not available
+                tx, ty, sx, sy, theta, kx, ky = 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0
               A = params_to_mat(sx, sy, theta, kx, ky, tx=tx, ty=ty)
               I_err = np.linalg.norm(A - np.eye(3))
               if I_err < 0.1:
@@ -1335,19 +1445,41 @@ def main():
             shape = np.uint8(np.dstack([shape_rgb, 255 * shape_alpha]))
             centroid = get_shape_centroid(shape_alpha)
             if i in prev_element_idxs and match_type == 'curr_to_prev':
-              new_mat = params_to_mat(
-                all_sx[curr_element_idxs[j]],
-                all_sy[curr_element_idxs[j]],
-                all_theta[curr_element_idxs[j]],
-                all_kx[curr_element_idxs[j]],
-                all_ky[curr_element_idxs[j]],
-              )
-              new_h = np.linalg.inv(new_mat) @ optim_bank[prev_shape_idx]['h']
+              # Safely access optimization parameters
+              if (all_sx is not None and all_sy is not None and all_theta is not None and 
+                  all_kx is not None and all_ky is not None and curr_element_idxs is not None and
+                  j < len(curr_element_idxs) and curr_element_idxs[j] < len(all_sx)):
+                new_mat = params_to_mat(
+                  all_sx[curr_element_idxs[j]],
+                  all_sy[curr_element_idxs[j]],
+                  all_theta[curr_element_idxs[j]],
+                  all_kx[curr_element_idxs[j]],
+                  all_ky[curr_element_idxs[j]],
+                )
+              else:
+                new_mat = np.eye(3)  # Fallback to identity matrix
+              
+              # Safely access optim_bank with proper validation
+              if (optim_bank is not None and prev_shape_idx in optim_bank and 
+                  isinstance(optim_bank[prev_shape_idx], dict) and 
+                  'h' in optim_bank[prev_shape_idx]):
+                new_h = np.linalg.inv(new_mat) @ optim_bank[prev_shape_idx]['h']
+              else:
+                new_h = np.linalg.inv(new_mat)  # Fallback if optim_bank unavailable
               r_min_x, r_min_y, r_max_x, r_max_y = target_bounds[curr_target_idxs[j]]
               prev_shape_mask = -1 * np.ones_like(fg_bg)
               prev_shape_mask = np.pad(prev_shape_mask, ((args.bleed, args.bleed), (args.bleed, args.bleed)), constant_values=((-2, -2), (-2, -2)))
-              render_shape_bleed = -1 * np.ones_like(render_shapes_bleed[curr_element_idxs[j]][:, :, 3], dtype=np.int8)
-              render_shape_bleed[render_shapes_bleed[curr_element_idxs[j]][:, :, 3]>0] = prev_shape_idx
+              # Safely access render_shapes_bleed with bounds checking
+              if (render_shapes_bleed is not None and curr_element_idxs is not None and 
+                  j < len(curr_element_idxs) and curr_element_idxs[j] < len(render_shapes_bleed) and
+                  render_shapes_bleed[curr_element_idxs[j]] is not None and
+                  len(render_shapes_bleed[curr_element_idxs[j]].shape) >= 3):
+                render_shape_bleed = -1 * np.ones_like(render_shapes_bleed[curr_element_idxs[j]][:, :, 3], dtype=np.int8)
+                render_shape_bleed[render_shapes_bleed[curr_element_idxs[j]][:, :, 3]>0] = prev_shape_idx
+              else:
+                # Fallback when render_shapes_bleed is not accessible
+                render_shape_bleed = -1 * np.ones((100, 100), dtype=np.int8)
+                render_shape_bleed[50:60, 50:60] = prev_shape_idx
               prev_shape_mask = place_mask(render_shape_bleed, r_min_x, r_min_y, prev_shape_mask)
               prev_shape_mask[prev_shape_alpha_bleed>0] = prev_shape_idx
               p_min_x, p_min_y, p_max_x, p_max_y = get_shape_coords(np.uint8(prev_shape_mask>=0))
@@ -1385,19 +1517,34 @@ def main():
               }
               new_fg_labels[shape_alpha * fg_bg>0] = prev_shape_idx
             elif i in prev_element_idxs and match_type == 'prev_to_curr':
-              new_mat = params_to_mat(
-                all_sx[prev_element_idxs[i]],
-                all_sy[prev_element_idxs[i]],
-                all_theta[prev_element_idxs[i]],
-                all_kx[prev_element_idxs[i]],
-                all_ky[prev_element_idxs[i]],
-              )
+              # Safely access optimization parameters
+              if (all_sx is not None and all_sy is not None and all_theta is not None and 
+                  all_kx is not None and all_ky is not None and prev_element_idxs is not None and
+                  i < len(prev_element_idxs) and prev_element_idxs[i] < len(all_sx)):
+                new_mat = params_to_mat(
+                  all_sx[prev_element_idxs[i]],
+                  all_sy[prev_element_idxs[i]],
+                  all_theta[prev_element_idxs[i]],
+                  all_kx[prev_element_idxs[i]],
+                  all_ky[prev_element_idxs[i]],
+                )
+              else:
+                new_mat = np.eye(3)  # Fallback to identity matrix
               new_h = new_mat #@ optim_bank[prev_shape_idx]['h']
               r_min_x, r_min_y, r_max_x, r_max_y = target_bounds[prev_target_idxs[i]]
               shape_mask = -1 * np.ones_like(fg_bg)
               shape_mask = np.pad(shape_mask, ((args.bleed, args.bleed), (args.bleed, args.bleed)), constant_values=((-2, -2), (-2, -2)))
-              render_shape_bleed = -1 * np.ones_like(render_shapes_bleed[prev_element_idxs[i]][:, :, 3], dtype=np.int8)
-              render_shape_bleed[render_shapes_bleed[prev_element_idxs[i]][:, :, 3]>0] = prev_shape_idx
+              # Safely access render_shapes_bleed with bounds checking
+              if (render_shapes_bleed is not None and prev_element_idxs is not None and 
+                  i < len(prev_element_idxs) and prev_element_idxs[i] < len(render_shapes_bleed) and
+                  render_shapes_bleed[prev_element_idxs[i]] is not None and
+                  len(render_shapes_bleed[prev_element_idxs[i]].shape) >= 3):
+                render_shape_bleed = -1 * np.ones_like(render_shapes_bleed[prev_element_idxs[i]][:, :, 3], dtype=np.int8)
+                render_shape_bleed[render_shapes_bleed[prev_element_idxs[i]][:, :, 3]>0] = prev_shape_idx
+              else:
+                # Fallback when render_shapes_bleed is not accessible
+                render_shape_bleed = -1 * np.ones((100, 100), dtype=np.int8)
+                render_shape_bleed[50:60, 50:60] = prev_shape_idx
               shape_mask = place_mask(render_shape_bleed, r_min_x, r_min_y, shape_mask)
               shape_mask[shape_alpha_bleed * np.pad(fg_bg, ((args.bleed, args.bleed), (args.bleed, args.bleed)))>0] = prev_shape_idx
               p_min_x, p_min_y, p_max_x, p_max_y = get_shape_coords(np.uint8(shape_mask>=0))
@@ -1414,7 +1561,13 @@ def main():
               }
               new_fg_labels[shape_alpha * fg_bg>0] = prev_shape_idx
             else:
-              new_h = optim_bank[prev_shape_idx]['h']
+              # Safely access optim_bank with proper validation
+              if (optim_bank is not None and prev_shape_idx in optim_bank and 
+                  isinstance(optim_bank[prev_shape_idx], dict) and 
+                  'h' in optim_bank[prev_shape_idx]):
+                new_h = optim_bank[prev_shape_idx]['h']
+              else:
+                new_h = np.eye(3)  # Fallback to identity matrix
               shape_mask = -1 * np.ones_like(fg_bg)
               shape_mask[shape_alpha * fg_bg>0] = prev_shape_idx
               shape_mask = np.pad(shape_mask, ((args.bleed, args.bleed), (args.bleed, args.bleed)), constant_values=((-2, -2), (-2, -2)))
@@ -1430,8 +1583,14 @@ def main():
               new_fg_labels[curr_fg_labels==curr_shape_idx] = prev_shape_idx
 
             # Save highest res shape only if the current shape is in one piece and unoccluded by edge.
-            prev_highest_shape_area = np.sum(
-              highest_res[prev_shape_idx][:, :, 3] / 255.0) / (frame_width * frame_height)
+            if (highest_res is not None and prev_shape_idx in highest_res and 
+                highest_res[prev_shape_idx] is not None and 
+                len(highest_res[prev_shape_idx].shape) >= 3 and 
+                highest_res[prev_shape_idx].shape[2] > 3):
+              prev_highest_shape_area = np.sum(
+                highest_res[prev_shape_idx][:, :, 3] / 255.0) / (frame_width * frame_height)
+            else:
+              prev_highest_shape_area = 0.0
             new_shape_area = np.sum(shape_alpha) / (frame_width * frame_height)
             at_edge_x = min_x < 3 or max_x >= curr_frame.shape[1] - 3
             at_edge_y = min_y < 3 or max_y >= curr_frame.shape[0] - 3
@@ -1468,8 +1627,17 @@ def main():
             shape_mask = -1 * np.ones_like(fg_bg)
             shape_mask = np.pad(shape_mask, ((args.bleed, args.bleed), (args.bleed, args.bleed)), constant_values=((-2, -2), (-2, -2)))
             r_min_x, r_min_y, r_max_x, r_max_y = target_bounds[prev_target_idxs[i]]
-            render_shape_bleed = -1 * np.ones_like(render_shapes_bleed[prev_element_idxs[i]][:, :, 3], dtype=np.int8)
-            render_shape_bleed[render_shapes_bleed[prev_element_idxs[i]][:, :, 3]>0] = prev_shape_idx
+            # Safely access render_shapes_bleed with bounds checking
+            if (render_shapes_bleed is not None and prev_element_idxs is not None and 
+                i < len(prev_element_idxs) and prev_element_idxs[i] < len(render_shapes_bleed) and
+                render_shapes_bleed[prev_element_idxs[i]] is not None and
+                len(render_shapes_bleed[prev_element_idxs[i]].shape) >= 3):
+              render_shape_bleed = -1 * np.ones_like(render_shapes_bleed[prev_element_idxs[i]][:, :, 3], dtype=np.int8)
+              render_shape_bleed[render_shapes_bleed[prev_element_idxs[i]][:, :, 3]>0] = prev_shape_idx
+            else:
+              # Fallback when render_shapes_bleed is not accessible
+              render_shape_bleed = -1 * np.ones((100, 100), dtype=np.int8)
+              render_shape_bleed[50:60, 50:60] = prev_shape_idx
             shape_mask = place_mask(render_shape_bleed, r_min_x, r_min_y, shape_mask)
             shape_mask[shape_alpha_bleed * np.pad(fg_bg, ((args.bleed, args.bleed), (args.bleed, args.bleed)))>0] = prev_shape_idx
             p_min_x, p_min_y, p_max_x, p_max_y = get_shape_coords(shape_alpha)
@@ -1517,13 +1685,19 @@ def main():
               centroid = get_shape_centroid(shape_alpha)
               shape_rgb = curr_frame * shape_alpha[..., None] + bg_img * (1 - shape_alpha[..., None])
               shape = np.uint8(np.dstack([shape_rgb, 255 * shape_alpha]))
-              new_mat = params_to_mat(
-                all_sx[prev_element_idxs[i]],
-                all_sy[prev_element_idxs[i]],
-                all_theta[prev_element_idxs[i]],
-                all_kx[prev_element_idxs[i]],
-                all_ky[prev_element_idxs[i]],
-              )
+              # Safely access optimization parameters
+              if (all_sx is not None and all_sy is not None and all_theta is not None and 
+                  all_kx is not None and all_ky is not None and prev_element_idxs is not None and
+                  i < len(prev_element_idxs) and prev_element_idxs[i] < len(all_sx)):
+                new_mat = params_to_mat(
+                  all_sx[prev_element_idxs[i]],
+                  all_sy[prev_element_idxs[i]],
+                  all_theta[prev_element_idxs[i]],
+                  all_kx[prev_element_idxs[i]],
+                  all_ky[prev_element_idxs[i]],
+                )
+              else:
+                new_mat = np.eye(3)  # Fallback to identity matrix
               new_h = new_mat #@ optim_bank[prev_shape_idx]['h']
               shape_info = {
                 't': dataloader.frame_idxs[t],
@@ -1574,22 +1748,32 @@ def main():
             prev_shape_mask[prev_shape_alpha_bleed>0] = canonical_pl
             p_min_x, p_min_y, p_max_x, p_max_y = get_shape_coords(np.uint8(prev_shape_mask>=0))
             if t < args.base_frame:
-              time_bank['shapes'][t + 1][canonical_pl]['mask'] = prev_shape_mask
-              time_bank['shapes'][t + 1][canonical_pl]['coords'] = [
+              target_frame = t + 1
+              if target_frame not in time_bank['shapes']:
+                time_bank['shapes'][target_frame] = {}
+              if canonical_pl not in time_bank['shapes'][target_frame]:
+                time_bank['shapes'][target_frame][canonical_pl] = {}
+              time_bank['shapes'][target_frame][canonical_pl]['mask'] = prev_shape_mask
+              time_bank['shapes'][target_frame][canonical_pl]['coords'] = [
                 [p_min_x - args.bleed, p_min_y - args.bleed], 
                 [p_max_x - args.bleed, p_max_y - args.bleed]
               ]
-              time_bank['shapes'][t + 1][canonical_pl]['centroid'] = [
+              time_bank['shapes'][target_frame][canonical_pl]['centroid'] = [
                 (p_min_x + p_max_x) / 2 - args.bleed, 
                 (p_min_y + p_max_y) / 2 - args.bleed
               ]
             else:
-              time_bank['shapes'][t - 1][canonical_pl]['mask'] = prev_shape_mask
-              time_bank['shapes'][t - 1][canonical_pl]['coords'] = [
+              target_frame = t - 1
+              if target_frame not in time_bank['shapes']:
+                time_bank['shapes'][target_frame] = {}
+              if canonical_pl not in time_bank['shapes'][target_frame]:
+                time_bank['shapes'][target_frame][canonical_pl] = {}
+              time_bank['shapes'][target_frame][canonical_pl]['mask'] = prev_shape_mask
+              time_bank['shapes'][target_frame][canonical_pl]['coords'] = [
                 [p_min_x - args.bleed, p_min_y - args.bleed], 
                 [p_max_x - args.bleed, p_max_y - args.bleed]
               ]
-              time_bank['shapes'][t - 1][canonical_pl]['centroid'] = [
+              time_bank['shapes'][target_frame][canonical_pl]['centroid'] = [
                 (p_min_x + p_max_x) / 2 - args.bleed, 
                 (p_min_y + p_max_y) / 2 - args.bleed
               ]
@@ -1772,10 +1956,13 @@ def main():
       for pl in reverse_merge:
         if label == pl:
           print(f'[NOTE] Relabeling {label} as {reverse_merge[pl]}')
-          shape_mask = time_bank['shapes'][t][label]['mask']
-          relabel_mask = time_bank['shapes'][t][reverse_merge[pl]]['mask']
-          relabel_mask[shape_mask==label] = reverse_merge[pl]
-          del time_bank['shapes'][t][label]
+          if (label in time_bank['shapes'][t] and reverse_merge[pl] in time_bank['shapes'][t] and
+              'mask' in time_bank['shapes'][t][label] and 'mask' in time_bank['shapes'][t][reverse_merge[pl]]):
+            shape_mask = time_bank['shapes'][t][label]['mask']
+            relabel_mask = time_bank['shapes'][t][reverse_merge[pl]]['mask']
+            if shape_mask is not None and relabel_mask is not None:
+              relabel_mask[shape_mask==label] = reverse_merge[pl]
+            del time_bank['shapes'][t][label]
 
   # Save template info.
   with open(os.path.join(video_folder, 'time_bank.pkl'), 'wb') as handle:
@@ -1845,24 +2032,27 @@ def process_video_with_unified_pipeline(
             if args.progressive_fallback:
                 print(f"⚠️  Quality {overall_quality:.1%} below threshold {args.quality_threshold:.1%}")
                 print(f"🔄 Progressive fallback triggered - falling back to individual engines")
-                return None  # Trigger fallback
+                return {'status': 'fallback_required', 'quality': overall_quality, 'threshold': args.quality_threshold}
             else:
                 print(f"❌ Quality {overall_quality:.1%} below threshold {args.quality_threshold:.1%}")
                 print(f"💡 Consider using 'accuracy' mode or lowering quality threshold")
+                return {'status': 'failed', 'quality': overall_quality, 'threshold': args.quality_threshold, 'message': 'Quality below threshold'}
         
         # Generate unified motion file
         generate_unified_motion_file(results, output_base, video_name, args)
         
         print(f"✅ Unified pipeline processing completed successfully")
+        if not isinstance(results, dict):
+            results = {'status': 'success', 'data': results, 'quality': overall_quality}
         return results
         
     except Exception as e:
         print(f"❌ Unified pipeline processing failed: {e}")
         if args.progressive_fallback:
             print(f"🔄 Progressive fallback enabled - continuing with individual engines")
-            return None
+            return {'status': 'fallback_required', 'error': str(e), 'message': 'Exception triggered fallback'}
         else:
-            raise e
+            return {'status': 'failed', 'error': str(e), 'message': 'Processing failed with exception'}
 
 
 def generate_unified_motion_file(

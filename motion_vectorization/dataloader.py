@@ -5,8 +5,6 @@ import logging
 import warnings
 from pathlib import Path
 from typing import Tuple, Optional, List
-# import torch
-# from scipy import interpolate
 
 from .utils import get_numbers
 

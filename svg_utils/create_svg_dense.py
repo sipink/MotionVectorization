@@ -1,13 +1,9 @@
 import argparse
 import json
 import drawsvg as draw
-# import math
 import base64
-# import cv2
 import numpy as np
-# import pickle
 import os
-# import copy
 from io import BytesIO
 from PIL import Image as PILImage
 from PIL.Image import Resampling

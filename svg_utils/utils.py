@@ -27,8 +27,6 @@ if not EASING_FUNCTIONS_AVAILABLE:
     class ExponentialEaseIn: pass
     class LinearInOut: pass
 
-# import soundfile as sf
-# from xml.dom import minidom
 import math
 import numpy as np
 import base64

@@ -12,7 +12,6 @@ from PIL import Image as Img
 from PIL.Image import Resampling
 from io import BytesIO
 
-# from retime import *
 try:
     from svg_utils.utils import calc_animation_duration, append_to_transform_value_arr, generate_display_key_times
 except ImportError:
@@ -280,28 +279,6 @@ def main():
     
     d.saveSvg(output_path)
 
-    # # find bounding box of extreme points
-    # extreme_bounding_box = find_extreme_poses(arg.video_dir, motion_file)
-
-    # # cropping
-    # crop_sizes = [[2, 1], [1, 2], [16, 9], [9, 16], [3, 2], [2, 3], [1, 1]]
-    # for crop_size in crop_sizes:
-    #     cropped_d = crop_svg(copy.deepcopy(d), extreme_bounding_box, [
-    #                          frame_width, frame_height], crop_size)
-    #     cropped_d.saveSvg(os.path.join(
-    #         arg.video_dir, 'motion_file_{}_{}.svg'.format(crop_size[0], crop_size[1])))
-
-    # # bounding box visualization
-    # d.append(draw.Rectangle(
-    #     extreme_bounding_box[0], -
-    #         (extreme_bounding_box[1] + extreme_bounding_box[3]),
-    #     extreme_bounding_box[2], extreme_bounding_box[3],
-    #     fill='transparent',
-    #     stroke_width=3,
-    #     stroke="rgb(0, 0, 255)",
-    #     z_index="999"
-    # ))
-    # d.saveSvg(os.path.join(arg.video_dir, 'motion_file_bounds.svg'))
 
 
 if __name__ == '__main__':

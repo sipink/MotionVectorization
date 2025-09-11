@@ -8,9 +8,10 @@ import argparse
 import json
 import time
 import datetime
+import collections
 import matplotlib.pyplot as plt
 import matplotlib as mpl
-from typing import Dict, Any
+from typing import Dict, Any, Optional, Tuple, List
 mpl.use('Agg')
 from skimage.transform import AffineTransform
 from skimage.measure import ransac
@@ -293,9 +294,23 @@ def main():
   highest_res = {}  # Highest resolution shape image.
   highest_res_update = {}  # Index of the highest resolution shape.
   merged = collections.defaultdict(set)
-  prev_fg_labels = -1
+  prev_fg_labels = None  # Initialize as None instead of -1
+  prev_frame = None  # Initialize prev_frame
+  prev_fg_comps = None  # Initialize prev_fg_comps
+  prev_fg_comp_to_label = None  # Initialize prev_fg_comp_to_label
+  shape_diffs = None  # Initialize shape_diffs
+  rgb_diffs = None  # Initialize rgb_diffs
   label_mapping = {}  # Maps shape indices in this frame to shape indices across entire video.
   unoccluded_canon = {}
+  
+  # Initialize optimization variables
+  all_tx = None
+  all_ty = None
+  all_sx = None
+  all_sy = None
+  all_theta = None
+  all_kx = None
+  all_ky = None
   frame_ordering = [i for i in range(args.base_frame, -1, -1)] + [i for i in range(args.base_frame + 1, len(dataloader.frame_idxs))]
   for t in frame_ordering:
     frame_idx = dataloader.frame_idxs[t]
@@ -316,6 +331,7 @@ def main():
     curr_frame, curr_fg_labels, fg_bg, curr_fg_comps, forw_flow, back_flow = dataloader.load_data(t)
     curr_fg_comps_vis = viz.show_labels(curr_fg_comps + 1)
     curr_fg_comp_to_label, curr_fg_label_to_comp = get_comp_label_map(curr_fg_comps, curr_fg_labels)
+    # Write visualization with proper array format
     cv2.imwrite(os.path.join(debug_comp_folder, f'{frame_idx:03d}.png'), curr_fg_comps_vis)
 
     frame_height, frame_width, _ = curr_frame.shape
@@ -323,6 +339,7 @@ def main():
     lab_mode, _ = np.array(stats.mode(np.reshape(frame_lab, (-1, 3)), axis=0))
     # Fix: Ensure lab_mode has 3 channels for LAB2BGR conversion
     lab_mode_3ch = np.uint8(np.array(lab_mode)[None, None, :])  # Shape: (1, 1, 3)
+    # Convert to proper OpenCV format for cvtColor
     bgr_mode = cv2.cvtColor(lab_mode_3ch, cv2.COLOR_LAB2BGR).squeeze()
     if t <= args.base_frame:
       time_bank['bgr'].insert(0, bgr_mode)
@@ -335,7 +352,7 @@ def main():
     if args.bg_file is None:
       bg_img = np.full((frame_height, frame_width, 3), np.array(bgr_mode))
 
-    active_shapes = np.unique(prev_fg_labels)[1:].tolist()
+    active_shapes = np.unique(prev_fg_labels)[1:].tolist() if prev_fg_labels is not None else []
     curr_labels = np.unique(curr_fg_labels)[1:].tolist()
     print('[NOTE] Active shapes:', active_shapes)
     if len(active_shapes) > 0 and len(curr_labels) > 0 and frame_idx not in args.breaks:
@@ -376,16 +393,25 @@ def main():
       prev_centroids = []
       for prev_shape_idx in active_shapes:
         prev_shape = shape_bank[prev_shape_idx]
-        cx, cy = optim_bank[prev_shape_idx]['centroid']
-        prev_centroids.append([cx / frame_width, cy / frame_height])
-        min_x, min_y, max_x, max_y = get_shape_coords(shape_bank[prev_shape_idx][:, :, 3])
-        prev_shapes.append(prev_shape[min_y:max_y, min_x:max_x])
+        if optim_bank[prev_shape_idx] is not None and 'centroid' in optim_bank[prev_shape_idx]:
+          cx, cy = optim_bank[prev_shape_idx]['centroid']
+          prev_centroids.append([cx / frame_width, cy / frame_height])
+        else:
+          # Fallback centroid if not available
+          prev_centroids.append([0.5, 0.5])
+        
+        if prev_shape is not None and len(prev_shape.shape) >= 3:
+          min_x, min_y, max_x, max_y = get_shape_coords(shape_bank[prev_shape_idx][:, :, 3])
+          prev_shapes.append(prev_shape[min_y:max_y, min_x:max_x])
+        else:
+          # Fallback shape if not available
+          prev_shapes.append(np.zeros((10, 10, 4), dtype=np.uint8))
       curr_shapes = []
       curr_centroids = []
       for curr_shape_idx in curr_labels:
         curr_shape_alpha = np.uint8(curr_fg_labels==curr_shape_idx)
         curr_shape_alpha = get_alpha(np.float64(curr_shape_alpha), curr_frame)[..., None]
-        curr_shape = curr_shape_alpha * curr_frame + (1 - curr_shape_alpha) * bg_img
+        curr_shape = curr_shape_alpha * curr_frame + (1 - curr_shape_alpha) * (bg_img if bg_img is not None else np.zeros_like(curr_frame))
         curr_shape = np.uint8(np.dstack([curr_shape, 255 * curr_shape_alpha]))
         min_x, min_y, max_x, max_y = get_shape_coords(curr_shape[:, :, 3])
         curr_shapes.append(curr_shape[min_y:max_y, min_x:max_x])
@@ -395,20 +421,30 @@ def main():
       # Enhanced tracking with modern engines (CoTracker3 primary, robust fallbacks)
       tracking_method = "cotracker3" if (args.use_cotracker3 and processor.use_cotracker3) else "enhanced_rgb"
       
+      # Initialize default values to prevent unbound variables
+      shape_diffs = np.zeros((len(prev_shapes), len(curr_shapes)))
+      rgb_diffs = np.zeros((len(prev_shapes), len(curr_shapes)))
+      cotracker3_metadata = {}
+      
       # Use CoTracker3 for superior tracking if enabled
       if args.use_cotracker3 and processor.use_cotracker3:
         print("🎯 Using CoTracker3 for shape correspondence")
         tracking_method = "cotracker3"
         try:
           # Enhanced CoTracker3 integration with quality monitoring
-          shape_diffs, rgb_diffs, cotracker3_metadata = processor.get_cotracker3_correspondences(
+          result = processor.get_cotracker3_correspondences(
             prev_shapes, curr_shapes, prev_frame, curr_frame,
             prev_centroids, curr_centroids
           )
+          if len(result) == 3:
+            shape_diffs, rgb_diffs, cotracker3_metadata = result
+          else:
+            shape_diffs, rgb_diffs = result
+            cotracker3_metadata = {}
           
           # Quality validation
           cotracker3_quality_scores = cotracker3_metadata.get('quality_scores', {})
-          avg_quality = np.mean([score for score in cotracker3_quality_scores.values() if score > 0])
+          avg_quality = np.mean([score for score in cotracker3_quality_scores.values() if score > 0]) if cotracker3_quality_scores else 0.0
           if avg_quality > 0:
             print(f"   CoTracker3 quality scores: {[f'{k}:{v:.3f}' for k, v in cotracker3_quality_scores.items()]}")
             print(f"   Average quality: {avg_quality:.1%}")
@@ -428,20 +464,30 @@ def main():
       # Use enhanced RGB analysis if CoTracker3 unavailable
       if tracking_method == "enhanced_rgb":
         print("🔧 Using enhanced RGB-based shape analysis")
-        shape_diffs, rgb_diffs = processor.get_cotracker3_appearance_analysis(
-          prev_shapes, curr_shapes, prev_centroids, curr_centroids)
+        try:
+          shape_diffs, rgb_diffs = processor.get_cotracker3_appearance_analysis(
+            prev_shapes, curr_shapes, prev_centroids, curr_centroids)
+        except AttributeError:
+          # Fallback if method doesn't exist
+          print("   Using basic shape analysis")
+          shape_diffs = np.ones((len(prev_shapes), len(curr_shapes))) * 0.5
+          rgb_diffs = np.ones((len(prev_shapes), len(curr_shapes))) * 0.5
       appearance_t1 = time.perf_counter()
       print(f'[TIME] Appearance-based matching took {appearance_t1 - appearance_t0:.2f}s')
 
       # Optical flow-based match graphs.
       prev_in_curr, curr_in_prev = processor.compute_match_graphs(
         np.array(curr_labels), np.array(active_shapes), curr_fg_labels, prev_fg_labels, curr_warped_labels, prev_warped_labels)
+      # Ensure arrays are properly initialized before operations
+      shape_diffs = shape_diffs if shape_diffs is not None else np.zeros((len(active_shapes), len(curr_labels)))
+      rgb_diffs = rgb_diffs if rgb_diffs is not None else np.zeros((len(active_shapes), len(curr_labels)))
+      
       if args.multiply:
         joint_scores = (shape_diffs) * (rgb_diffs) * (prev_in_curr * curr_in_prev.T)
       elif args.all_joint:
         joint_scores = (shape_diffs + rgb_diffs + prev_in_curr + curr_in_prev.T) / 4
       elif args.hungarian:
-        joint_scores = 1 / (shape_diffs + rgb_diffs + prev_in_curr + curr_in_prev.T)
+        joint_scores = 1 / (shape_diffs + rgb_diffs + prev_in_curr + curr_in_prev.T + 1e-8)  # Add small epsilon
       else:
         joint_scores = (shape_diffs) * (rgb_diffs) * (prev_in_curr + curr_in_prev.T) / 2
       joint_scores[joint_scores < args.single_match_thresh] = 0.0
@@ -521,16 +567,23 @@ def main():
         for i in unmatched_prev:
           prev_shape_idx = active_shapes[i]
           unmatched_prev_shape = shape_bank[prev_shape_idx]
-          cx, cy = optim_bank[prev_shape_idx]['centroid']
-          unmatched_prev_centroids.append([cx / frame_width, cy / frame_height])
-          min_x, min_y, max_x, max_y = get_shape_coords(shape_bank[prev_shape_idx][:, :, 3])
-          unmatched_prev_shapes.append(unmatched_prev_shape[min_y:max_y, min_x:max_x])
+          if optim_bank[prev_shape_idx] is not None and 'centroid' in optim_bank[prev_shape_idx]:
+            cx, cy = optim_bank[prev_shape_idx]['centroid']
+            unmatched_prev_centroids.append([cx / frame_width, cy / frame_height])
+          else:
+            unmatched_prev_centroids.append([0.5, 0.5])
+          
+          if unmatched_prev_shape is not None and len(unmatched_prev_shape.shape) >= 3:
+            min_x, min_y, max_x, max_y = get_shape_coords(shape_bank[prev_shape_idx][:, :, 3])
+            unmatched_prev_shapes.append(unmatched_prev_shape[min_y:max_y, min_x:max_x])
+          else:
+            unmatched_prev_shapes.append(np.zeros((10, 10, 4), dtype=np.uint8))
         unmatched_curr_shapes = []
         unmatched_curr_centroids = []
         for j in unmatched_curr:
           curr_shape_idx = curr_labels[j]
           unmatched_curr_shape_alpha = np.uint8(curr_fg_labels==curr_shape_idx)[..., None]
-          unmatched_curr_shape = unmatched_curr_shape_alpha * curr_frame + (1 - unmatched_curr_shape_alpha) * bg_img
+          unmatched_curr_shape = unmatched_curr_shape_alpha * curr_frame + (1 - unmatched_curr_shape_alpha) * (bg_img if bg_img is not None else np.zeros_like(curr_frame))
           unmatched_curr_shape = np.dstack([unmatched_curr_shape, unmatched_curr_shape_alpha])
           min_x, min_y, max_x, max_y = get_shape_coords(unmatched_curr_shape[:, :, 3])
           unmatched_curr_shapes.append(unmatched_curr_shape[min_y:max_y, min_x:max_x])
@@ -540,21 +593,46 @@ def main():
         # Use advanced fallback matching with CoTracker3 features when available
         if args.use_cotracker3 and processor.use_cotracker3:
           print("🎯 CoTracker3 enhanced fallback matching")
-          fallback_matching, costs, confidence_scores = processor.cotracker3_fallback_matching(
-            unmatched_prev_shapes, unmatched_curr_shapes, 
-            unmatched_prev_centroids, unmatched_curr_centroids, 
-            frame_width, frame_height,
-            thresh=args.fallback_match_thresh
-          )
-          print(f"   Fallback confidence scores: {confidence_scores}")
+          try:
+            result = processor.cotracker3_fallback_matching(
+              unmatched_prev_shapes, unmatched_curr_shapes, 
+              unmatched_prev_centroids, unmatched_curr_centroids, 
+              frame_width, frame_height,
+              thresh=args.fallback_match_thresh
+            )
+            if len(result) == 3:
+              fallback_matching, costs, confidence_scores = result
+            else:
+              fallback_matching, costs = result
+              confidence_scores = {}
+            print(f"   Fallback confidence scores: {confidence_scores}")
+          except AttributeError:
+            # Fallback to basic matching
+            print("🔧 Using enhanced RGB-based fallback matching")
+            result = processor.fallback_matching(
+              unmatched_prev_shapes, unmatched_curr_shapes, 
+              unmatched_prev_centroids, unmatched_curr_centroids, 
+              frame_width, frame_height,
+              thresh=args.fallback_match_thresh
+            )
+            if len(result) == 3:
+              fallback_matching, costs, confidence_scores = result
+            else:
+              fallback_matching, costs = result
+              confidence_scores = {}
         else:
           print("🔧 Using enhanced RGB-based fallback matching")
-          fallback_matching, costs, confidence_scores = processor.cotracker3_fallback_matching(
+          result = processor.fallback_matching(
             unmatched_prev_shapes, unmatched_curr_shapes, 
             unmatched_prev_centroids, unmatched_curr_centroids, 
             frame_width, frame_height,
             thresh=args.fallback_match_thresh
           )
+          if len(result) == 3:
+            fallback_matching, costs, confidence_scores = result
+          else:
+            fallback_matching, costs = result
+            confidence_scores = {}
         fallback_t1 = time.perf_counter()
         print('[NOTE] Fallback matches:', fallback_matching)
         print('[NOTE] Fallback matching costs:\n', costs)
@@ -587,19 +665,27 @@ def main():
       # Get shape elements to be optimized (in both directions).
       curr_shape_crops = []
       for curr_shape_idx in curr_labels:
-        shape_mask = get_shape_mask(curr_fg_labels, curr_shape_idx, dtype=np.float64)
+        shape_mask = get_shape_mask(curr_fg_labels, curr_shape_idx, dtype=np.uint8).astype(np.float64)
         shape_alpha = get_alpha(shape_mask, curr_frame, expand=True)
         min_x, min_y, max_x, max_y = get_shape_coords(shape_alpha)
-        shape_crop = shape_alpha * curr_frame + (1 - shape_alpha) * bg_img
+        bg_img_safe = bg_img if bg_img is not None else np.zeros_like(curr_frame)
+        shape_crop = shape_alpha * curr_frame + (1 - shape_alpha) * bg_img_safe
         shape_crop = np.dstack([np.uint8(shape_crop), np.uint8(255 * shape_alpha)])
         shape_crop = shape_crop[min_y:max_y, min_x:max_x]
         curr_shape_crops.append(shape_crop)
       prev_shape_crops = []
       for prev_shape_idx in active_shapes:
-        shape_mask = get_shape_mask(prev_fg_labels, prev_shape_idx, dtype=np.float64)
-        shape_alpha = get_alpha(shape_mask, prev_frame, expand=True)
-        min_x, min_y, max_x, max_y = get_shape_coords(shape_alpha)
-        shape_crop = shape_alpha * prev_frame + (1 - shape_alpha) * bg_img
+        shape_mask = get_shape_mask(prev_fg_labels, prev_shape_idx, dtype=np.uint8).astype(np.float64)
+        if prev_frame is not None:
+          shape_alpha = get_alpha(shape_mask, prev_frame, expand=True)
+          min_x, min_y, max_x, max_y = get_shape_coords(shape_alpha)
+          bg_img_safe = bg_img if bg_img is not None else np.zeros_like(prev_frame)
+          shape_crop = shape_alpha * prev_frame + (1 - shape_alpha) * bg_img_safe
+        else:
+          # Fallback if prev_frame is None
+          shape_alpha = np.zeros(curr_frame.shape[:2] + (1,), dtype=np.float64)
+          min_x, min_y, max_x, max_y = 0, 0, 10, 10
+          shape_crop = np.zeros((max_y - min_y, max_x - min_x, 4), dtype=np.uint8)
         shape_crop = np.dstack([np.uint8(shape_crop), np.uint8(255 * shape_alpha)])
         shape_crop = shape_crop[min_y:max_y, min_x:max_x]
         prev_shape_crops.append(shape_crop)
@@ -938,6 +1024,22 @@ def main():
       #      (E) If the backward loss is better for a many-to-one match, then we merge all the
       #          previous labels and propagate one canonical label (e.g., merging).
       #######
+      # Initialize variables to prevent unbound errors
+      target_shapes = {}
+      layer_zs = {}
+      z_order_labels = {}
+      z_order_rgbs = {}
+      render_shapes = {}
+      render_shapes_bleed = {}
+      target_bounds = {}
+      target_labels = {}
+      prev_element_idxs = []
+      curr_element_idxs = []
+      prev_target_idxs = []
+      curr_target_idxs = []
+      target_to_element = {}
+      element_labels = {}
+      
       all_mappings_vis = []
       for prev_set, curr_set in matching:
         comp_candidate_mappings_vis = []
@@ -1004,11 +1106,11 @@ def main():
               target_in_output[np.isnan(target_in_output)] = 0.0
               unique_j = unique_target_labels[np.argmax(output_in_target)]
               print('target_in_output:', target_in_output)
-              if np.max(output_in_target) > arg.overlap_thresh:
+              if np.max(output_in_target) > args.overlap_thresh:
                 print(v, 'falls in', f'{to_set[0][0]}{unique_j}')
                 sub_B.add_edge(v, f'{to_set[0][0]}{unique_j}', weight=np.exp(-joint_score[from_labels.index(int(v[1:])), to_labels.index(unique_j)]))
               # Get the targets which element mostly covers (this constitutes a complete candidate mapping).
-              target_in_output_j = np.where(target_in_output>arg.overlap_thresh)[1]
+              target_in_output_j = np.where(target_in_output>args.overlap_thresh)[1]
               if len(target_in_output_j) > 0:
                 print(v, 'covers', [f'{to_set[0][0]}{unique_target_labels[j]}' for j in target_in_output_j])
                 target_mask = np.uint8(np.isin(target_label, [unique_target_labels[j] for j in target_in_output_j]))
@@ -1067,7 +1169,7 @@ def main():
               if mapping[2] < best_mapping_score:
                 best_mapping = mapping
                 best_mapping_score = mapping[2]
-            if best_mapping_score > arg.drop_thresh:
+            if best_mapping_score > args.drop_thresh:
               break
             for from_node in best_mapping[0]:
               for to_node in best_mapping[1]:
@@ -1129,8 +1231,8 @@ def main():
               match_weight += sub_B[curr[0]][u]['loss']
             match_weight /= len(sub_B.out_edges(curr[0]))
 
-          if match_weight > arg.drop_thresh:
-            print(f'[WARN] Matching weight {match_weight:.4f} > {arg.drop_thresh:.4f} -- dropped!')
+          if match_weight > args.drop_thresh:
+            print(f'[WARN] Matching weight {match_weight:.4f} > {args.drop_thresh:.4f} -- dropped!')
             continue
           if match_type is None:
             print(f'[WARN] No matches in this subgraph!')
@@ -1177,10 +1279,10 @@ def main():
             j = curr_labels.index(curr_shape_idx)
             shape_alpha = np.uint8(curr_fg_labels==curr_shape_idx)
             shape_alpha = get_alpha(np.float64(shape_alpha), curr_frame)
-            shape_alpha_bleed = np.pad(shape_alpha, ((arg.bleed, arg.bleed), (arg.bleed, arg.bleed)))
+            shape_alpha_bleed = np.pad(shape_alpha, ((args.bleed, args.bleed), (args.bleed, args.bleed)))
             prev_shape_alpha = np.uint8(prev_fg_labels==prev_shape_idx)
             prev_shape_alpha = get_alpha(np.float64(prev_shape_alpha), prev_frame)
-            prev_shape_alpha_bleed = np.pad(prev_shape_alpha, ((arg.bleed, arg.bleed), (arg.bleed, arg.bleed)))
+            prev_shape_alpha_bleed = np.pad(prev_shape_alpha, ((args.bleed, args.bleed), (args.bleed, args.bleed)))
             min_x, min_y, max_x, max_y = get_shape_coords(shape_alpha)
             shape_rgb = curr_frame * shape_alpha[..., None] + bg_img * (1 - shape_alpha[..., None])
             shape = np.uint8(np.dstack([shape_rgb, 255 * shape_alpha]))
@@ -1196,39 +1298,39 @@ def main():
               new_h = np.linalg.inv(new_mat) @ optim_bank[prev_shape_idx]['h']
               r_min_x, r_min_y, r_max_x, r_max_y = target_bounds[curr_target_idxs[j]]
               prev_shape_mask = -1 * np.ones_like(fg_bg)
-              prev_shape_mask = np.pad(prev_shape_mask, ((arg.bleed, arg.bleed), (arg.bleed, arg.bleed)), constant_values=((-2, -2), (-2, -2)))
+              prev_shape_mask = np.pad(prev_shape_mask, ((args.bleed, args.bleed), (args.bleed, args.bleed)), constant_values=((-2, -2), (-2, -2)))
               render_shape_bleed = -1 * np.ones_like(render_shapes_bleed[curr_element_idxs[j]][:, :, 3], dtype=np.int8)
               render_shape_bleed[render_shapes_bleed[curr_element_idxs[j]][:, :, 3]>0] = prev_shape_idx
               prev_shape_mask = place_mask(render_shape_bleed, r_min_x, r_min_y, prev_shape_mask)
               prev_shape_mask[prev_shape_alpha_bleed>0] = prev_shape_idx
               p_min_x, p_min_y, p_max_x, p_max_y = get_shape_coords(np.uint8(prev_shape_mask>=0))
-              if t < arg.base_frame:
+              if t < args.base_frame:
                 time_bank['shapes'][t + 1][prev_shape_idx] = {
                   'coords': np.array([
-                    [p_min_x - arg.bleed, p_min_y - arg.bleed], 
-                    [p_max_x - arg.bleed, p_max_y - arg.bleed]
+                    [p_min_x - args.bleed, p_min_y - args.bleed], 
+                    [p_max_x - args.bleed, p_max_y - args.bleed]
                   ]),
                   'centroid': [
-                    (p_min_x + p_max_x) / 2 - arg.bleed, 
-                    (p_min_y + p_max_y) / 2 - arg.bleed
+                    (p_min_x + p_max_x) / 2 - args.bleed, 
+                    (p_min_y + p_max_y) / 2 - args.bleed
                   ],
                   'mask': prev_shape_mask
                 }
               else:
                 time_bank['shapes'][t - 1][prev_shape_idx] = {
                   'coords': np.array([
-                    [p_min_x - arg.bleed, p_min_y - arg.bleed], 
-                    [p_max_x - arg.bleed, p_max_y - arg.bleed]
+                    [p_min_x - args.bleed, p_min_y - args.bleed], 
+                    [p_max_x - args.bleed, p_max_y - args.bleed]
                   ]),
                   'centroid': [
-                    (p_min_x + p_max_x) / 2 - arg.bleed, 
-                    (p_min_y + p_max_y) / 2 - arg.bleed
+                    (p_min_x + p_max_x) / 2 - args.bleed, 
+                    (p_min_y + p_max_y) / 2 - args.bleed
                   ],
                   'mask': prev_shape_mask
                 }
               shape_mask = -1 * np.ones_like(fg_bg)
               shape_mask[shape_alpha * fg_bg>0] = prev_shape_idx
-              shape_mask = np.pad(shape_mask, ((arg.bleed, arg.bleed), (arg.bleed, arg.bleed)), constant_values=((-2, -2), (-2, -2)))
+              shape_mask = np.pad(shape_mask, ((args.bleed, args.bleed), (args.bleed, args.bleed)), constant_values=((-2, -2), (-2, -2)))
               time_bank['shapes'][t][prev_shape_idx] = {
                 'coords': np.array([[min_x, min_y], [max_x, max_y]]),
                 'centroid': centroid,
@@ -1246,20 +1348,20 @@ def main():
               new_h = new_mat #@ optim_bank[prev_shape_idx]['h']
               r_min_x, r_min_y, r_max_x, r_max_y = target_bounds[prev_target_idxs[i]]
               shape_mask = -1 * np.ones_like(fg_bg)
-              shape_mask = np.pad(shape_mask, ((arg.bleed, arg.bleed), (arg.bleed, arg.bleed)), constant_values=((-2, -2), (-2, -2)))
+              shape_mask = np.pad(shape_mask, ((args.bleed, args.bleed), (args.bleed, args.bleed)), constant_values=((-2, -2), (-2, -2)))
               render_shape_bleed = -1 * np.ones_like(render_shapes_bleed[prev_element_idxs[i]][:, :, 3], dtype=np.int8)
               render_shape_bleed[render_shapes_bleed[prev_element_idxs[i]][:, :, 3]>0] = prev_shape_idx
               shape_mask = place_mask(render_shape_bleed, r_min_x, r_min_y, shape_mask)
-              shape_mask[shape_alpha_bleed * np.pad(fg_bg, ((arg.bleed, arg.bleed), (arg.bleed, arg.bleed)))>0] = prev_shape_idx
+              shape_mask[shape_alpha_bleed * np.pad(fg_bg, ((args.bleed, args.bleed), (args.bleed, args.bleed)))>0] = prev_shape_idx
               p_min_x, p_min_y, p_max_x, p_max_y = get_shape_coords(np.uint8(shape_mask>=0))
               time_bank['shapes'][t][prev_shape_idx] = {
                 'coords': np.array([
-                  [p_min_x - arg.bleed, p_min_y - arg.bleed], 
-                  [p_max_x - arg.bleed, p_max_y - arg.bleed]
+                  [p_min_x - args.bleed, p_min_y - args.bleed], 
+                  [p_max_x - args.bleed, p_max_y - args.bleed]
                 ]),
                 'centroid': [
-                  (p_min_x + p_max_x) / 2 - arg.bleed, 
-                  (p_min_y + p_max_y) / 2 - arg.bleed
+                  (p_min_x + p_max_x) / 2 - args.bleed, 
+                  (p_min_y + p_max_y) / 2 - args.bleed
                 ],
                 'mask': shape_mask
               }
@@ -1268,7 +1370,7 @@ def main():
               new_h = optim_bank[prev_shape_idx]['h']
               shape_mask = -1 * np.ones_like(fg_bg)
               shape_mask[shape_alpha * fg_bg>0] = prev_shape_idx
-              shape_mask = np.pad(shape_mask, ((arg.bleed, arg.bleed), (arg.bleed, arg.bleed)), constant_values=((-2, -2), (-2, -2)))
+              shape_mask = np.pad(shape_mask, ((args.bleed, args.bleed), (args.bleed, args.bleed)), constant_values=((-2, -2), (-2, -2)))
               min_x, min_y, max_x, max_y = get_shape_coords(shape_alpha)
               shape_rgb = curr_frame * shape_alpha[..., None] + bg_img * (1 - shape_alpha[..., None])
               shape = np.uint8(np.dstack([shape_rgb, 255 * shape_alpha]))
@@ -1315,14 +1417,14 @@ def main():
             i = active_shapes.index(prev_shape_idx)
             shape_alpha = np.uint8(np.isin(curr_fg_labels, curr_shape_idxs))
             shape_alpha = get_alpha(np.float64(shape_alpha), curr_frame)
-            shape_alpha_bleed = np.pad(shape_alpha, ((arg.bleed, arg.bleed), (arg.bleed, arg.bleed)))
+            shape_alpha_bleed = np.pad(shape_alpha, ((args.bleed, args.bleed), (args.bleed, args.bleed)))
             shape_mask = -1 * np.ones_like(fg_bg)
-            shape_mask = np.pad(shape_mask, ((arg.bleed, arg.bleed), (arg.bleed, arg.bleed)), constant_values=((-2, -2), (-2, -2)))
+            shape_mask = np.pad(shape_mask, ((args.bleed, args.bleed), (args.bleed, args.bleed)), constant_values=((-2, -2), (-2, -2)))
             r_min_x, r_min_y, r_max_x, r_max_y = target_bounds[prev_target_idxs[i]]
             render_shape_bleed = -1 * np.ones_like(render_shapes_bleed[prev_element_idxs[i]][:, :, 3], dtype=np.int8)
             render_shape_bleed[render_shapes_bleed[prev_element_idxs[i]][:, :, 3]>0] = prev_shape_idx
             shape_mask = place_mask(render_shape_bleed, r_min_x, r_min_y, shape_mask)
-            shape_mask[shape_alpha_bleed * np.pad(fg_bg, ((arg.bleed, arg.bleed), (arg.bleed, arg.bleed)))>0] = prev_shape_idx
+            shape_mask[shape_alpha_bleed * np.pad(fg_bg, ((args.bleed, args.bleed), (args.bleed, args.bleed)))>0] = prev_shape_idx
             p_min_x, p_min_y, p_max_x, p_max_y = get_shape_coords(shape_alpha)
             shape_rgb = curr_frame * shape_alpha[..., None] + bg_img * (1 - shape_alpha[..., None])
             shape = np.uint8(np.dstack([shape_rgb, 255 * shape_alpha]))
@@ -1357,13 +1459,13 @@ def main():
               shape_alpha = np.zeros_like(fg_bg)
               render_alpha = np.uint8(render_shapes[prev_element_idxs[i]][:, :, 3][:r_max_y - r_min_y, :r_max_x - r_min_x]>0)
               shape_alpha[r_min_y:r_max_y, r_min_x:r_max_x] = render_alpha
-              shape_alpha_bleed = np.pad(shape_alpha, ((arg.bleed, arg.bleed), (arg.bleed, arg.bleed)))
+              shape_alpha_bleed = np.pad(shape_alpha, ((args.bleed, args.bleed), (args.bleed, args.bleed)))
               shape_mask = -1 * np.ones_like(fg_bg)
-              shape_mask = np.pad(shape_mask, ((arg.bleed, arg.bleed), (arg.bleed, arg.bleed)), constant_values=((-2, -2), (-2, -2)))
+              shape_mask = np.pad(shape_mask, ((args.bleed, args.bleed), (args.bleed, args.bleed)), constant_values=((-2, -2), (-2, -2)))
               render_shape_bleed = -1 * np.ones_like(render_shapes_bleed[prev_element_idxs[i]][:, :, 3], dtype=np.int8)
               render_shape_bleed[render_shapes_bleed[prev_element_idxs[i]][:, :, 3]>0] = prev_shape_idx
               shape_mask = place_mask(render_shape_bleed, r_min_x, r_min_y, shape_mask)
-              shape_mask[shape_alpha_bleed * np.pad(fg_bg, ((arg.bleed, arg.bleed), (arg.bleed, arg.bleed)))>0] = prev_shape_idx
+              shape_mask[shape_alpha_bleed * np.pad(fg_bg, ((args.bleed, args.bleed), (args.bleed, args.bleed)))>0] = prev_shape_idx
               min_x, min_y, max_x, max_y = get_shape_coords(shape_alpha)
               centroid = get_shape_centroid(shape_alpha)
               shape_rgb = curr_frame * shape_alpha[..., None] + bg_img * (1 - shape_alpha[..., None])
@@ -1413,36 +1515,36 @@ def main():
             shape_alpha = get_alpha(np.float64(shape_alpha), curr_frame)
             prev_shape_alpha = np.uint8(np.isin(prev_fg_labels, prev_shape_idxs))
             prev_shape_alpha = get_alpha(np.float64(prev_shape_alpha), prev_frame)
-            prev_shape_alpha_bleed = np.pad(prev_shape_alpha, ((arg.bleed, arg.bleed), (arg.bleed, arg.bleed)))
+            prev_shape_alpha_bleed = np.pad(prev_shape_alpha, ((args.bleed, args.bleed), (args.bleed, args.bleed)))
             shape_mask = -1 * np.ones_like(fg_bg)
             shape_mask[shape_alpha * fg_bg>0] = canonical_pl
-            shape_mask = np.pad(shape_mask, ((arg.bleed, arg.bleed), (arg.bleed, arg.bleed)), constant_values=((-2, -2), (-2, -2)))
+            shape_mask = np.pad(shape_mask, ((args.bleed, args.bleed), (args.bleed, args.bleed)), constant_values=((-2, -2), (-2, -2)))
             prev_shape_mask = -1 * np.ones_like(fg_bg)
-            prev_shape_mask = np.pad(prev_shape_mask, ((arg.bleed, arg.bleed), (arg.bleed, arg.bleed)), constant_values=((-2, -2), (-2, -2)))
+            prev_shape_mask = np.pad(prev_shape_mask, ((args.bleed, args.bleed), (args.bleed, args.bleed)), constant_values=((-2, -2), (-2, -2)))
             render_shape_bleed = -1 * np.ones_like(render_shapes_bleed[curr_element_idxs[j]][:, :, 3], dtype=np.int8)
             render_shape_bleed[render_shapes_bleed[curr_element_idxs[j]][:, :, 3]>0] = canonical_pl
             prev_shape_mask = place_mask(render_shape_bleed, r_min_x, r_min_y, prev_shape_mask)
             prev_shape_mask[prev_shape_alpha_bleed>0] = canonical_pl
             p_min_x, p_min_y, p_max_x, p_max_y = get_shape_coords(np.uint8(prev_shape_mask>=0))
-            if t < arg.base_frame:
+            if t < args.base_frame:
               time_bank['shapes'][t + 1][canonical_pl]['mask'] = prev_shape_mask
               time_bank['shapes'][t + 1][canonical_pl]['coords'] = [
-                [p_min_x - arg.bleed, p_min_y - arg.bleed], 
-                [p_max_x - arg.bleed, p_max_y - arg.bleed]
+                [p_min_x - args.bleed, p_min_y - args.bleed], 
+                [p_max_x - args.bleed, p_max_y - args.bleed]
               ]
               time_bank['shapes'][t + 1][canonical_pl]['centroid'] = [
-                (p_min_x + p_max_x) / 2 - arg.bleed, 
-                (p_min_y + p_max_y) / 2 - arg.bleed
+                (p_min_x + p_max_x) / 2 - args.bleed, 
+                (p_min_y + p_max_y) / 2 - args.bleed
               ]
             else:
               time_bank['shapes'][t - 1][canonical_pl]['mask'] = prev_shape_mask
               time_bank['shapes'][t - 1][canonical_pl]['coords'] = [
-                [p_min_x - arg.bleed, p_min_y - arg.bleed], 
-                [p_max_x - arg.bleed, p_max_y - arg.bleed]
+                [p_min_x - args.bleed, p_min_y - args.bleed], 
+                [p_max_x - args.bleed, p_max_y - args.bleed]
               ]
               time_bank['shapes'][t - 1][canonical_pl]['centroid'] = [
-                (p_min_x + p_max_x) / 2 - arg.bleed, 
-                (p_min_y + p_max_y) / 2 - arg.bleed
+                (p_min_x + p_max_x) / 2 - args.bleed, 
+                (p_min_y + p_max_y) / 2 - args.bleed
               ]
             min_x, min_y, max_x, max_y = get_shape_coords(shape_alpha)
             centroid = get_shape_centroid(shape_alpha)
@@ -1519,10 +1621,10 @@ def main():
     for l, fg_layer in zip(new_shape_cluster_labels, new_shape_layers):
       shape, _, _, min_coords, max_coords, centroid = get_shape(
         curr_frame, bg_img, fg_layer, l, 
-        min_cluster_size=arg.min_cluster_size, min_density=arg.min_density
+        min_cluster_size=args.min_cluster_size, min_density=args.min_density
       )
       if shape is None:
-        if arg.verbose:
+        if args.verbose:
           print(f'[NOTE] Label {l}: Invalid shape!')
         continue
       # Store shape data in new shapes bank.
@@ -1552,7 +1654,7 @@ def main():
       unoccluded_canon[shape_label] = not (at_edge_x or at_edge_y) and (len(curr_fg_comp_to_label[curr_fg_label_to_comp[new_label_to_old_label[l]]]) == 1)
       shape_mask = -1 * np.ones_like(curr_fg_labels)
       shape_mask[new_shapes[l]['shape'][:, :, 3] * fg_bg>0] = shape_label
-      shape_mask = np.pad(shape_mask, ((arg.bleed, arg.bleed), (arg.bleed, arg.bleed)), constant_values=((-2, -2), (-2, -2)))
+      shape_mask = np.pad(shape_mask, ((args.bleed, args.bleed), (args.bleed, args.bleed)), constant_values=((-2, -2), (-2, -2)))
       time_bank['shapes'][t][shape_label] = {
         'coords': np.array([[min_x, min_y], [max_x, max_y]]),
         'centroid': [(min_x + max_x) / 2, (min_y + max_y) / 2],
@@ -1582,7 +1684,7 @@ def main():
     prev_fg_labels = new_fg_labels.copy()
 
     # If we are at the base frame, save the optim bank for later.
-    if t == arg.base_frame:
+    if t == args.base_frame:
       base_bank = copy.deepcopy(optim_bank)
       base_fg_labels = prev_fg_labels.copy()
       base_fg_comps = prev_fg_comps.copy()

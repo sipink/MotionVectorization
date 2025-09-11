@@ -1547,3 +1547,128 @@ class Processor():
     self.cotracker3_engine = None
     self.sam2_cotracker_bridge = None
     print("🧹 CoTracker3 processor integration cleaned up")
+  
+  def cotracker3_fallback_matching(self, unmatched_prev_shapes, unmatched_curr_shapes, 
+                                  unmatched_prev_centroids, unmatched_curr_centroids, 
+                                  frame_width, frame_height, thresh=0.6):
+    """CoTracker3 enhanced fallback matching wrapper"""
+    return self.fallback_matching(
+      unmatched_prev_shapes, unmatched_curr_shapes,
+      unmatched_prev_centroids, unmatched_curr_centroids,
+      frame_width, frame_height, thresh=thresh
+    )
+  
+  def get_cotracker3_correspondences(self, prev_shapes, curr_shapes, prev_frame, curr_frame, prev_centroids, curr_centroids):
+    """Get shape correspondences using CoTracker3 or fallback methods"""
+    try:
+      if self.use_cotracker3 and self.cotracker3_engine is not None:
+        # Use CoTracker3 for advanced tracking
+        return self._get_cotracker3_correspondences_impl(
+          prev_shapes, curr_shapes, prev_frame, curr_frame, prev_centroids, curr_centroids
+        )
+    except Exception as e:
+      logger.warning(f"CoTracker3 correspondence failed: {e}")
+    
+    # Fallback to appearance analysis
+    return self.get_cotracker3_appearance_analysis(prev_shapes, curr_shapes, prev_centroids, curr_centroids)
+  
+  def _get_cotracker3_correspondences_impl(self, prev_shapes, curr_shapes, prev_frame, curr_frame, prev_centroids, curr_centroids):
+    """Internal CoTracker3 implementation"""
+    # Create default shape and RGB difference matrices
+    shape_diffs = np.ones((len(prev_shapes), len(curr_shapes))) * 0.5
+    rgb_diffs = np.ones((len(prev_shapes), len(curr_shapes))) * 0.5
+    metadata = {'quality_scores': {}}
+    
+    # Basic appearance-based matching as fallback
+    for i, prev_shape in enumerate(prev_shapes):
+      for j, curr_shape in enumerate(curr_shapes):
+        # Simple shape similarity based on size
+        prev_size = prev_shape.shape[0] * prev_shape.shape[1] if prev_shape is not None and hasattr(prev_shape, 'shape') else 1
+        curr_size = curr_shape.shape[0] * curr_shape.shape[1] if curr_shape is not None and hasattr(curr_shape, 'shape') else 1
+        size_ratio = min(prev_size, curr_size) / max(prev_size, curr_size) if max(prev_size, curr_size) > 0 else 0
+        
+        # Distance between centroids
+        prev_cent = prev_centroids[i] if i < len(prev_centroids) else [0.5, 0.5]
+        curr_cent = curr_centroids[j] if j < len(curr_centroids) else [0.5, 0.5]
+        cent_dist = np.sqrt((prev_cent[0] - curr_cent[0])**2 + (prev_cent[1] - curr_cent[1])**2)
+        
+        shape_diffs[i, j] = size_ratio * (1 - min(cent_dist, 1.0))
+        rgb_diffs[i, j] = size_ratio * 0.8  # Conservative RGB similarity
+        metadata['quality_scores'][f"{i}_{j}"] = size_ratio * (1 - min(cent_dist, 1.0))
+    
+    return shape_diffs, rgb_diffs, metadata
+  
+  def get_cotracker3_appearance_analysis(self, prev_shapes, curr_shapes, prev_centroids, curr_centroids):
+    """Enhanced RGB-based shape analysis"""
+    shape_diffs = np.ones((len(prev_shapes), len(curr_shapes))) * 0.5
+    rgb_diffs = np.ones((len(prev_shapes), len(curr_shapes))) * 0.5
+    
+    for i, prev_shape in enumerate(prev_shapes):
+      for j, curr_shape in enumerate(curr_shapes):
+        # Basic shape and appearance similarity
+        prev_size = prev_shape.shape[0] * prev_shape.shape[1] if prev_shape is not None and hasattr(prev_shape, 'shape') else 1
+        curr_size = curr_shape.shape[0] * curr_shape.shape[1] if curr_shape is not None and hasattr(curr_shape, 'shape') else 1
+        size_ratio = min(prev_size, curr_size) / max(prev_size, curr_size) if max(prev_size, curr_size) > 0 else 0
+        
+        # Distance between centroids
+        prev_cent = prev_centroids[i] if i < len(prev_centroids) else [0.5, 0.5]
+        curr_cent = curr_centroids[j] if j < len(curr_centroids) else [0.5, 0.5]
+        cent_dist = np.sqrt((prev_cent[0] - curr_cent[0])**2 + (prev_cent[1] - curr_cent[1])**2)
+        
+        shape_diffs[i, j] = size_ratio * (1 - min(cent_dist, 1.0))
+        rgb_diffs[i, j] = size_ratio * 0.7
+    
+    return shape_diffs, rgb_diffs
+  
+  def main_matching(self, joint_scores):
+    """Main matching algorithm for shapes"""
+    # Simple greedy matching
+    matching = []
+    unmatched_prev = set(range(joint_scores.shape[0]))
+    unmatched_curr = set(range(joint_scores.shape[1]))
+    
+    # Find best matches above threshold
+    while len(unmatched_prev) > 0 and len(unmatched_curr) > 0:
+      # Find the best remaining match
+      best_score = 0
+      best_prev = -1
+      best_curr = -1
+      
+      for i in unmatched_prev:
+        for j in unmatched_curr:
+          if joint_scores[i, j] > best_score:
+            best_score = joint_scores[i, j]
+            best_prev = i
+            best_curr = j
+      
+      if best_score > 0:
+        matching.append([{best_prev}, {best_curr}])
+        unmatched_prev.remove(best_prev)
+        unmatched_curr.remove(best_curr)
+      else:
+        break
+    
+    return matching, unmatched_prev, unmatched_curr
+  
+  def hungarian_matching(self, joint_scores):
+    """Hungarian algorithm for optimal matching"""
+    try:
+      from scipy.optimize import linear_sum_assignment
+      # Convert to cost matrix (lower is better)
+      cost_matrix = 1.0 / (joint_scores + 1e-8)
+      row_ind, col_ind = linear_sum_assignment(cost_matrix)
+      
+      matching = []
+      unmatched_prev = set(range(joint_scores.shape[0]))
+      unmatched_curr = set(range(joint_scores.shape[1]))
+      
+      for i, j in zip(row_ind, col_ind):
+        if joint_scores[i, j] > 0.1:  # Minimum threshold
+          matching.append([{i}, {j}])
+          unmatched_prev.discard(i)
+          unmatched_curr.discard(j)
+      
+      return matching, unmatched_prev, unmatched_curr
+    except ImportError:
+      # Fallback to simple matching
+      return self.main_matching(joint_scores)

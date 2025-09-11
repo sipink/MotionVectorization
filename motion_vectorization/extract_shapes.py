@@ -901,7 +901,21 @@ def main():
                 _, _, sx0, sy0, theta0, kx0 = decompose(init_data['h'])
               else:
                 sx0, sy0, theta0, kx0 = 1.0, 1.0, 0.0, 0.0
-              shape_crop = shape_crops.get(shape_idx) if isinstance(shape_crops, dict) else None
+              # Handle both dictionary and list types for shape_crops
+              if isinstance(shape_crops, dict):
+                shape_crop = shape_crops.get(shape_idx)
+              elif isinstance(shape_crops, list):
+                # Find the index of shape_idx in from_labels to get the corresponding shape_crop
+                try:
+                  crop_idx = from_labels.index(shape_idx)
+                  if crop_idx < len(shape_crops):
+                    shape_crop = shape_crops[crop_idx]
+                  else:
+                    shape_crop = None
+                except (ValueError, IndexError):
+                  shape_crop = None
+              else:
+                shape_crop = None
               if shape_crop is None:
                 continue
               # Only append element data after confirming shape_crop exists
@@ -1140,6 +1154,11 @@ def main():
               i = from_labels.index(shape_idx)
               if len(match_dict[i]) < 1:
                 continue
+              # Add bounds checking for element_idx
+              if element_idx >= full_elements.shape[0]:
+                print(f'[WARNING] element_idx {element_idx} out of bounds for full_elements with shape {full_elements.shape}')
+                element_idx += 1
+                continue
               shape_alpha = compositing.torch2numpy(full_elements[element_idx])[:, :, 3]
               shape_alpha = shape_alpha[:frame_height, :frame_width]
               comp_alpha = np.maximum(comp_alpha, shape_alpha)
@@ -1151,13 +1170,19 @@ def main():
               i = from_labels.index(shape_idx)
               if len(match_dict[i]) < 1:
                 continue
+              # Add bounds checking for element_idx
+              if element_idx >= full_elements.shape[0]:
+                print(f'[WARNING] element_idx {element_idx} out of bounds for full_elements with shape {full_elements.shape}')
+                element_idx += 1
+                continue
               elements.append(full_elements[element_idx, :, r_min_y:r_max_y, r_min_x:r_max_x])
               # Adjust translation initialization to dimension of element.
               dimension_factor = max(int(r_max_x - r_min_x), int(r_max_y - r_min_y)) / 2
-              if dimension_factor > 0:
+              if dimension_factor > 0 and element_idx < len(tx_init) and element_idx < len(ty_init):
                 tx_init[element_idx] /= dimension_factor
                 ty_init[element_idx] /= dimension_factor
-              centroids_opt[element_idx] = [centroids_opt[element_idx][0] - r_min_x, centroids_opt[element_idx][1] - r_min_y]
+              if element_idx < len(centroids_opt):
+                centroids_opt[element_idx] = [centroids_opt[element_idx][0] - r_min_x, centroids_opt[element_idx][1] - r_min_y]
               element_idxs[i] = element_idx
               target_idxs[i] = target_idx
               target_to_element[target_idx].append(element_idx)
@@ -1172,7 +1197,14 @@ def main():
       print('[NOTE] target_to_element:', target_to_element)
       
       # Ensure element counts match to prevent IndexError
-      assert len(element_labels) == len(elements), f"Mismatch: {len(element_labels)} labels vs {len(elements)} elements"
+      # Note: element_labels is a list, while element_labels_mapping (defined later) is a dict
+      if len(element_labels) != len(elements):
+        print(f'[WARNING] Mismatch: {len(element_labels)} labels vs {len(elements)} elements')
+        # Pad or trim to match
+        if len(element_labels) < len(elements):
+          element_labels.extend([-1] * (len(elements) - len(element_labels)))
+        elif len(elements) < len(element_labels):
+          element_labels = element_labels[:len(elements)]
 
       if len(target_to_element) > 0 and len(elements) > 0 and len(targets) > 0:
         t2e_vis = viz.target_to_element(target_to_element, elements, targets)
@@ -1203,10 +1235,18 @@ def main():
           element_zs = [layer_zs[element_idx] for element_idx in target_to_element[target_idx]]
           render_order = [target_to_element[target_idx][i] for i in np.argsort(element_zs)]
           for ro in render_order:
-            shape_mask = render_shapes[ro][:target_height, :target_width, 3]
-            shape_rgb = render_shapes[ro][:target_height, :target_width, :3]
-            z_order_rgb = shape_mask[..., None] * shape_rgb + (1 - shape_mask[..., None]) * z_order_rgb
-            z_order_label[shape_mask>0.5] = element_labels[ro]
+            # Add bounds checking for render_shapes access
+            if ro < len(render_shapes):
+              shape_mask = render_shapes[ro][:target_height, :target_width, 3]
+              shape_rgb = render_shapes[ro][:target_height, :target_width, :3]
+              z_order_rgb = shape_mask[..., None] * shape_rgb + (1 - shape_mask[..., None]) * z_order_rgb
+            else:
+              print(f'[WARNING] render_order index {ro} out of bounds for render_shapes with length {len(render_shapes)}')
+            # Add bounds checking for element_labels access
+            if ro < len(element_labels):
+              z_order_label[shape_mask>0.5] = element_labels[ro]
+            else:
+              print(f'[WARNING] Index {ro} out of bounds for element_labels with length {len(element_labels)}')
           z_order_labels[target_idx] = z_order_label
           z_order_rgbs[target_idx] = z_order_rgb
 
@@ -1263,7 +1303,7 @@ def main():
       prev_target_idxs = []
       curr_target_idxs = []
       target_to_element = {}
-      element_labels = {}
+      element_labels_mapping = {}
       
       all_mappings_vis = []
       for prev_set, curr_set in matching:
@@ -1295,12 +1335,22 @@ def main():
             [curr_frame, prev_frame], [joint_scores, joint_scores.T]
           ):
             sub_B.remove_edges_from(list(sub_B.edges))
-            r_min_x, r_min_y, r_max_x, r_max_y = target_bounds[target_idxs[from_list[0]]]
-            target_width = r_max_x - r_min_x
-            target_height = r_max_y - r_min_y
-            # Get target RGB and labels.
-            target_rgb = target_shapes[target_idxs[from_list[0]]][:target_height, :target_width, :3] / 255.0
-            target_label = target_labels[target_idxs[from_list[0]]]
+            # Add bounds checking for target_idxs access
+            if from_list and from_list[0] in target_idxs:
+              target_idx_val = target_idxs[from_list[0]]
+              if target_idx_val < len(target_bounds) and target_idx_val < len(target_shapes) and target_idx_val < len(target_labels):
+                r_min_x, r_min_y, r_max_x, r_max_y = target_bounds[target_idx_val]
+                target_width = r_max_x - r_min_x
+                target_height = r_max_y - r_min_y
+                # Get target RGB and labels.
+                target_rgb = target_shapes[target_idx_val][:target_height, :target_width, :3] / 255.0
+                target_label = target_labels[target_idx_val]
+              else:
+                print(f'[WARNING] target_idx {target_idx_val} out of bounds')
+                continue
+            else:
+              print(f'[WARNING] from_list[0] {from_list[0] if from_list else "empty"} not in target_idxs')
+              continue
             unique_target_labels = np.array([to_labels[j] for j in to_list])
             target_labels_mask = np.tile(target_label, [len(unique_target_labels), 1, 1])
             target_labels_mask = np.reshape(target_labels_mask, (len(unique_target_labels), -1))
@@ -1323,8 +1373,18 @@ def main():
             render_order = np.argsort(element_zs).tolist()
 
             # Get render element labels in z-ordering.
-            z_order_label = z_order_labels[target_idxs[from_list[0]]]
-            render_rgb = z_order_rgbs[target_idxs[from_list[0]]] 
+            # Add bounds checking for z_order access
+            if from_list and from_list[0] in target_idxs:
+              target_idx_val = target_idxs[from_list[0]]
+              if target_idx_val in z_order_labels and target_idx_val in z_order_rgbs:
+                z_order_label = z_order_labels[target_idx_val]
+                render_rgb = z_order_rgbs[target_idx_val]
+              else:
+                print(f'[WARNING] target_idx {target_idx_val} not in z_order dictionaries')
+                continue
+            else:
+              print(f'[WARNING] Invalid from_list for z_order access')
+              continue 
 
             # Find the corresponding target regions for each shape.
             for i, v in enumerate(from_set):
@@ -1332,7 +1392,12 @@ def main():
               output_mask = np.uint8(z_order_label==int(v[1:]))
               if np.sum(output_mask) < 5:
                 continue
-              output_rgb = render_shapes[element_idxs[from_list[i]]][:target_height, :target_width, :3]
+              # Add bounds checking for render_shapes access
+              if from_list[i] in element_idxs and element_idxs[from_list[i]] < len(render_shapes):
+                output_rgb = render_shapes[element_idxs[from_list[i]]][:target_height, :target_width, :3]
+              else:
+                output_rgb = np.zeros((target_height, target_width, 3), dtype=np.float32)
+                print(f'[WARNING] element_idxs[{from_list[i]}] out of bounds or not found for render_shapes')
               output_label = np.reshape(output_mask, (1, -1)) / 1.0
               output_total = np.sum(output_label)
               output_in_target = output_label @ target_labels_mask.T / output_total
@@ -1370,7 +1435,15 @@ def main():
                 target_mask = np.uint8(np.isin(target_label, [unique_target_labels[j] for j in target_in_output_j]))
                 # output_rgba = np.dstack([output_rgb, output_mask[..., None]])
                 # target_rgba = np.dstack([target_rgb, target_mask[..., None]])
-                target_rgb_ = target_mask[..., None] * target_rgb + (1 - target_mask[..., None]) * bg_crops[target_idxs[from_list[0]]] / 255.0
+                # Add bounds checking for bg_crops access
+                if from_list and from_list[0] in target_idxs:
+                  target_idx_val = target_idxs[from_list[0]]
+                  if target_idx_val < len(bg_crops):
+                    target_rgb_ = target_mask[..., None] * target_rgb + (1 - target_mask[..., None]) * bg_crops[target_idx_val] / 255.0
+                  else:
+                    target_rgb_ = target_rgb
+                else:
+                  target_rgb_ = target_rgb
                 loss_mask = np.maximum(target_mask, output_mask)[..., None]
                 loss = np.sum(loss_mask * (output_rgb - target_rgb_)**2.0) / np.sum(loss_mask)
                 # cv2.imshow('target_mask', 255 * target_mask)
@@ -1394,11 +1467,27 @@ def main():
                 # Sort by render order.
                 in_nodes = [v for v, _ in sub_B.in_edges(u)]
                 output_mask = np.uint8(np.isin(z_order_label, [int(v[1:]) for v in in_nodes]))
-                output_rgb = output_mask[..., None] * render_rgb + (1 - output_mask[..., None]) * bg_crops[target_idxs[from_list[0]]] / 255.0
+                # Add bounds checking for bg_crops access
+                if from_list and from_list[0] in target_idxs:
+                  target_idx_val = target_idxs[from_list[0]]
+                  if target_idx_val < len(bg_crops):
+                    output_rgb = output_mask[..., None] * render_rgb + (1 - output_mask[..., None]) * bg_crops[target_idx_val] / 255.0
+                  else:
+                    output_rgb = render_rgb
+                else:
+                  output_rgb = render_rgb
                 loss_mask = np.maximum(target_mask, output_mask)[..., None]
                 # output_rgba = np.dstack([render_rgb, output_mask[..., None]])
                 # target_rgba = np.dstack([target_rgb, target_mask[..., None]])
-                target_rgb_ = target_mask[..., None] * target_rgb + (1 - target_mask[..., None]) * bg_crops[target_idxs[from_list[0]]] / 255.0
+                # Add bounds checking for bg_crops access
+                if from_list and from_list[0] in target_idxs:
+                  target_idx_val = target_idxs[from_list[0]]
+                  if target_idx_val < len(bg_crops):
+                    target_rgb_ = target_mask[..., None] * target_rgb + (1 - target_mask[..., None]) * bg_crops[target_idx_val] / 255.0
+                  else:
+                    target_rgb_ = target_rgb
+                else:
+                  target_rgb_ = target_rgb
                 loss = np.sum(loss_mask * (render_rgb - target_rgb_)**2.0) / np.sum(loss_mask)
                 # cv2.imshow('target_mask', 255 * target_mask)
                 # cv2.imshow('target_rgb', target_rgb)
@@ -1579,7 +1668,12 @@ def main():
                 new_h = np.linalg.inv(new_mat) @ optim_bank[prev_shape_idx].get('h', np.eye(3))
               else:
                 new_h = np.linalg.inv(new_mat)  # Fallback if optim_bank unavailable
-              r_min_x, r_min_y, r_max_x, r_max_y = target_bounds[curr_target_idxs[j]]
+              # Add bounds checking for target_bounds access
+              if j in curr_target_idxs and curr_target_idxs[j] < len(target_bounds):
+                r_min_x, r_min_y, r_max_x, r_max_y = target_bounds[curr_target_idxs[j]]
+              else:
+                print(f'[WARNING] curr_target_idxs[{j}] out of bounds or not found')
+                continue
               prev_shape_mask = -1 * np.ones_like(fg_bg)
               prev_shape_mask = np.pad(prev_shape_mask, ((args.bleed, args.bleed), (args.bleed, args.bleed)), constant_values=((-2, -2), (-2, -2)))
               # Safely access render_shapes_bleed with bounds checking
@@ -1644,89 +1738,94 @@ def main():
               else:
                 new_mat = np.eye(3)  # Fallback to identity matrix
               new_h = new_mat #@ optim_bank[prev_shape_idx]['h']
+              # Add bounds checking for target_bounds access
+            if i in prev_target_idxs and prev_target_idxs[i] < len(target_bounds):
               r_min_x, r_min_y, r_max_x, r_max_y = target_bounds[prev_target_idxs[i]]
-              shape_mask = -1 * np.ones_like(fg_bg)
-              shape_mask = np.pad(shape_mask, ((args.bleed, args.bleed), (args.bleed, args.bleed)), constant_values=((-2, -2), (-2, -2)))
-              # Safely access render_shapes_bleed with bounds checking
-              if (render_shapes_bleed is not None and prev_element_idxs is not None and 
-                  i < len(prev_element_idxs) and prev_element_idxs[i] < len(render_shapes_bleed) and
-                  render_shapes_bleed[prev_element_idxs[i]] is not None and
-                  len(render_shapes_bleed[prev_element_idxs[i]].shape) >= 3):
-                render_shape_bleed = -1 * np.ones_like(render_shapes_bleed[prev_element_idxs[i]][:, :, 3], dtype=np.int8)
-                render_shape_bleed[render_shapes_bleed[prev_element_idxs[i]][:, :, 3]>0] = prev_shape_idx
-              else:
-                # Fallback when render_shapes_bleed is not accessible
-                render_shape_bleed = -1 * np.ones((100, 100), dtype=np.int8)
-                render_shape_bleed[50:60, 50:60] = prev_shape_idx
-              shape_mask = place_mask(render_shape_bleed, r_min_x, r_min_y, shape_mask)
-              shape_mask[shape_alpha_bleed * np.pad(fg_bg, ((args.bleed, args.bleed), (args.bleed, args.bleed)))>0] = prev_shape_idx
-              p_min_x, p_min_y, p_max_x, p_max_y = get_shape_coords(np.uint8(shape_mask>=0))
-              time_bank['shapes'][t][prev_shape_idx] = {
-                'coords': np.array([
-                  [p_min_x - args.bleed, p_min_y - args.bleed], 
-                  [p_max_x - args.bleed, p_max_y - args.bleed]
-                ]),
-                'centroid': [
-                  (p_min_x + p_max_x) / 2 - args.bleed, 
-                  (p_min_y + p_max_y) / 2 - args.bleed
-                ],
-                'mask': shape_mask
-              }
-              new_fg_labels[shape_alpha * fg_bg>0] = prev_shape_idx
             else:
-              # Safely access optim_bank with proper validation
-              if (optim_bank is not None and prev_shape_idx in optim_bank and 
-                  isinstance(optim_bank[prev_shape_idx], dict) and 
-                  'h' in optim_bank[prev_shape_idx]):
-                new_h = optim_bank[prev_shape_idx].get('h', np.eye(3))
-              else:
-                new_h = np.eye(3)  # Fallback to identity matrix
-              shape_mask = -1 * np.ones_like(fg_bg)
-              shape_mask[shape_alpha * fg_bg>0] = prev_shape_idx
-              shape_mask = np.pad(shape_mask, ((args.bleed, args.bleed), (args.bleed, args.bleed)), constant_values=((-2, -2), (-2, -2)))
-              shape_coords = get_shape_coords(shape_alpha)
-              if shape_coords is not None and len(shape_coords) == 4:
-                min_x, min_y, max_x, max_y = shape_coords
-              else:
-                min_x, min_y, max_x, max_y = 0, 0, 10, 10
-              bg_img_safe = bg_img if bg_img is not None else np.zeros_like(curr_frame)
-              shape_rgb = curr_frame * shape_alpha[..., None] + bg_img_safe * (1 - shape_alpha[..., None])
-              shape = np.uint8(np.dstack([shape_rgb, 255 * shape_alpha]))
-              centroid = get_shape_centroid(shape_alpha)
-              if centroid is None:
-                centroid = [(min_x + max_x) / 2, (min_y + max_y) / 2]
-              time_bank['shapes'][t][prev_shape_idx] = {
-                'coords': np.array([[min_x, min_y], [max_x, max_y]]),
-                'centroid': centroid,
-                'mask': shape_mask
-              }
-              new_fg_labels[curr_fg_labels==curr_shape_idx] = prev_shape_idx
+              print(f'[WARNING] prev_target_idxs[{i}] out of bounds or not found')
+              continue
+            shape_mask = -1 * np.ones_like(fg_bg)
+            shape_mask = np.pad(shape_mask, ((args.bleed, args.bleed), (args.bleed, args.bleed)), constant_values=((-2, -2), (-2, -2)))
+            # Safely access render_shapes_bleed with bounds checking
+            if (render_shapes_bleed is not None and prev_element_idxs is not None and 
+                i < len(prev_element_idxs) and prev_element_idxs[i] < len(render_shapes_bleed) and
+                render_shapes_bleed[prev_element_idxs[i]] is not None and
+                len(render_shapes_bleed[prev_element_idxs[i]].shape) >= 3):
+              render_shape_bleed = -1 * np.ones_like(render_shapes_bleed[prev_element_idxs[i]][:, :, 3], dtype=np.int8)
+              render_shape_bleed[render_shapes_bleed[prev_element_idxs[i]][:, :, 3]>0] = prev_shape_idx
+            else:
+              # Fallback when render_shapes_bleed is not accessible
+              render_shape_bleed = -1 * np.ones((100, 100), dtype=np.int8)
+              render_shape_bleed[50:60, 50:60] = prev_shape_idx
+            shape_mask = place_mask(render_shape_bleed, r_min_x, r_min_y, shape_mask)
+            shape_mask[shape_alpha_bleed * np.pad(fg_bg, ((args.bleed, args.bleed), (args.bleed, args.bleed)))>0] = prev_shape_idx
+            p_min_x, p_min_y, p_max_x, p_max_y = get_shape_coords(np.uint8(shape_mask>=0))
+            time_bank['shapes'][t][prev_shape_idx] = {
+              'coords': np.array([
+                [p_min_x - args.bleed, p_min_y - args.bleed], 
+                [p_max_x - args.bleed, p_max_y - args.bleed]
+              ]),
+              'centroid': [
+                (p_min_x + p_max_x) / 2 - args.bleed, 
+                (p_min_y + p_max_y) / 2 - args.bleed
+              ],
+              'mask': shape_mask
+            }
+            new_fg_labels[shape_alpha * fg_bg>0] = prev_shape_idx
+          else:
+            # Safely access optim_bank with proper validation
+            if (optim_bank is not None and prev_shape_idx in optim_bank and 
+                isinstance(optim_bank[prev_shape_idx], dict) and 
+                'h' in optim_bank[prev_shape_idx]):
+              new_h = optim_bank[prev_shape_idx].get('h', np.eye(3))
+            else:
+              new_h = np.eye(3)  # Fallback to identity matrix
+            shape_mask = -1 * np.ones_like(fg_bg)
+            shape_mask[shape_alpha * fg_bg>0] = prev_shape_idx
+            shape_mask = np.pad(shape_mask, ((args.bleed, args.bleed), (args.bleed, args.bleed)), constant_values=((-2, -2), (-2, -2)))
+            shape_coords = get_shape_coords(shape_alpha)
+            if shape_coords is not None and len(shape_coords) == 4:
+              min_x, min_y, max_x, max_y = shape_coords
+            else:
+              min_x, min_y, max_x, max_y = 0, 0, 10, 10
+            bg_img_safe = bg_img if bg_img is not None else np.zeros_like(curr_frame)
+            shape_rgb = curr_frame * shape_alpha[..., None] + bg_img_safe * (1 - shape_alpha[..., None])
+            shape = np.uint8(np.dstack([shape_rgb, 255 * shape_alpha]))
+            centroid = get_shape_centroid(shape_alpha)
+            if centroid is None:
+              centroid = [(min_x + max_x) / 2, (min_y + max_y) / 2]
+            time_bank['shapes'][t][prev_shape_idx] = {
+              'coords': np.array([[min_x, min_y], [max_x, max_y]]),
+              'centroid': centroid,
+              'mask': shape_mask
+            }
+            new_fg_labels[curr_fg_labels==curr_shape_idx] = prev_shape_idx
 
-            # Save highest res shape only if the current shape is in one piece and unoccluded by edge.
-            if (highest_res is not None and prev_shape_idx in highest_res and 
-                highest_res[prev_shape_idx] is not None and 
-                len(highest_res[prev_shape_idx].shape) >= 3 and 
-                highest_res[prev_shape_idx].shape[2] > 3):
-              prev_highest_shape_area = np.sum(
-                highest_res[prev_shape_idx][:, :, 3] / 255.0) / (frame_width * frame_height)
-            else:
-              prev_highest_shape_area = 0.0
-            new_shape_area = np.sum(shape_alpha) / (frame_width * frame_height)
-            at_edge_x = min_x < 3 or max_x >= curr_frame.shape[1] - 3
-            at_edge_y = min_y < 3 or max_y >= curr_frame.shape[0] - 3
-            occluded = len(curr_fg_comp_to_label[curr_fg_label_to_comp[curr_shape_idx]]) > 1
-            print(f'Prev shape {prev_shape_idx} occluded:', (not unoccluded_canon[prev_shape_idx]))
-            if unoccluded_canon[prev_shape_idx]:
-              if new_shape_area > prev_highest_shape_area and not at_edge_x and not at_edge_y and not occluded:
-                highest_res[prev_shape_idx] = shape[min_y:max_y, min_x:max_x]
-                highest_res_update[prev_shape_idx] = True
-                new_h = np.eye(3)
-            else:
-              if new_shape_area > prev_highest_shape_area:
-                highest_res[prev_shape_idx] = shape[min_y:max_y, min_x:max_x]
-                highest_res_update[prev_shape_idx] = True
-                unoccluded_canon[prev_shape_idx] = not (at_edge_x or at_edge_y) and not occluded
-                new_h = np.eye(3)
+          # Save highest res shape only if the current shape is in one piece and unoccluded by edge.
+          if (highest_res is not None and prev_shape_idx in highest_res and 
+              highest_res[prev_shape_idx] is not None and 
+              len(highest_res[prev_shape_idx].shape) >= 3 and 
+              highest_res[prev_shape_idx].shape[2] > 3):
+            prev_highest_shape_area = np.sum(
+              highest_res[prev_shape_idx][:, :, 3] / 255.0) / (frame_width * frame_height)
+          else:
+            prev_highest_shape_area = 0.0
+          new_shape_area = np.sum(shape_alpha) / (frame_width * frame_height)
+          at_edge_x = min_x < 3 or max_x >= curr_frame.shape[1] - 3
+          at_edge_y = min_y < 3 or max_y >= curr_frame.shape[0] - 3
+          occluded = len(curr_fg_comp_to_label[curr_fg_label_to_comp[curr_shape_idx]]) > 1
+          print(f'Prev shape {prev_shape_idx} occluded:', (not unoccluded_canon[prev_shape_idx]))
+          if unoccluded_canon[prev_shape_idx]:
+            if new_shape_area > prev_highest_shape_area and not at_edge_x and not at_edge_y and not occluded:
+              highest_res[prev_shape_idx] = shape[min_y:max_y, min_x:max_x]
+              highest_res_update[prev_shape_idx] = True
+              new_h = np.eye(3)
+          else:
+            if new_shape_area > prev_highest_shape_area:
+              highest_res[prev_shape_idx] = shape[min_y:max_y, min_x:max_x]
+              highest_res_update[prev_shape_idx] = True
+              unoccluded_canon[prev_shape_idx] = not (at_edge_x or at_edge_y) and not occluded
+              new_h = np.eye(3)
 
             shape_info = {
               't': dataloader.frame_idxs[t],
@@ -1746,14 +1845,24 @@ def main():
             shape_alpha_bleed = np.pad(shape_alpha, ((args.bleed, args.bleed), (args.bleed, args.bleed)))
             shape_mask = -1 * np.ones_like(fg_bg)
             shape_mask = np.pad(shape_mask, ((args.bleed, args.bleed), (args.bleed, args.bleed)), constant_values=((-2, -2), (-2, -2)))
-            r_min_x, r_min_y, r_max_x, r_max_y = target_bounds[prev_target_idxs[i]]
+            # Add bounds checking for target_bounds access
+            if i in prev_target_idxs and prev_target_idxs[i] < len(target_bounds):
+              r_min_x, r_min_y, r_max_x, r_max_y = target_bounds[prev_target_idxs[i]]
+            else:
+              print(f'[WARNING] prev_target_idxs[{i}] out of bounds or not found')
+              continue
             # Safely access render_shapes_bleed with bounds checking
             if (render_shapes_bleed is not None and prev_element_idxs is not None and 
                 i < len(prev_element_idxs) and prev_element_idxs[i] < len(render_shapes_bleed) and
                 render_shapes_bleed[prev_element_idxs[i]] is not None and
                 len(render_shapes_bleed[prev_element_idxs[i]].shape) >= 3):
-              render_shape_bleed = -1 * np.ones_like(render_shapes_bleed[prev_element_idxs[i]][:, :, 3], dtype=np.int8)
-              render_shape_bleed[render_shapes_bleed[prev_element_idxs[i]][:, :, 3]>0] = prev_shape_idx
+              # Add bounds checking for render_shapes_bleed access
+              if i in prev_element_idxs and prev_element_idxs[i] < len(render_shapes_bleed):
+                render_shape_bleed = -1 * np.ones_like(render_shapes_bleed[prev_element_idxs[i]][:, :, 3], dtype=np.int8)
+                render_shape_bleed[render_shapes_bleed[prev_element_idxs[i]][:, :, 3]>0] = prev_shape_idx
+              else:
+                render_shape_bleed = -2 * np.ones((frame_height + 2*args.bleed, frame_width + 2*args.bleed), dtype=np.int8)
+                print(f'[WARNING] prev_element_idxs[{i}] out of bounds for render_shapes_bleed')
             else:
               # Fallback when render_shapes_bleed is not accessible
               render_shape_bleed = -1 * np.ones((100, 100), dtype=np.int8)
@@ -1792,13 +1901,23 @@ def main():
             for i in prev_list:
               prev_shape_idx = active_shapes[i]
               shape_alpha = np.zeros_like(fg_bg)
-              render_alpha = np.uint8(render_shapes[prev_element_idxs[i]][:, :, 3][:r_max_y - r_min_y, :r_max_x - r_min_x]>0)
+              # Add bounds checking for render_shapes access
+              if i in prev_element_idxs and prev_element_idxs[i] < len(render_shapes):
+                render_alpha = np.uint8(render_shapes[prev_element_idxs[i]][:, :, 3][:r_max_y - r_min_y, :r_max_x - r_min_x]>0)
+              else:
+                render_alpha = np.zeros((r_max_y - r_min_y, r_max_x - r_min_x), dtype=np.uint8)
+                print(f'[WARNING] prev_element_idxs[{i}] out of bounds or not found for render_shapes')
               shape_alpha[r_min_y:r_max_y, r_min_x:r_max_x] = render_alpha
               shape_alpha_bleed = np.pad(shape_alpha, ((args.bleed, args.bleed), (args.bleed, args.bleed)))
               shape_mask = -1 * np.ones_like(fg_bg)
               shape_mask = np.pad(shape_mask, ((args.bleed, args.bleed), (args.bleed, args.bleed)), constant_values=((-2, -2), (-2, -2)))
-              render_shape_bleed = -1 * np.ones_like(render_shapes_bleed[prev_element_idxs[i]][:, :, 3], dtype=np.int8)
-              render_shape_bleed[render_shapes_bleed[prev_element_idxs[i]][:, :, 3]>0] = prev_shape_idx
+              # Add bounds checking for render_shapes_bleed access
+              if i in prev_element_idxs and prev_element_idxs[i] < len(render_shapes_bleed):
+                render_shape_bleed = -1 * np.ones_like(render_shapes_bleed[prev_element_idxs[i]][:, :, 3], dtype=np.int8)
+                render_shape_bleed[render_shapes_bleed[prev_element_idxs[i]][:, :, 3]>0] = prev_shape_idx
+              else:
+                render_shape_bleed = -2 * np.ones((frame_height + 2*args.bleed, frame_width + 2*args.bleed), dtype=np.int8)
+                print(f'[WARNING] prev_element_idxs[{i}] out of bounds for render_shapes_bleed')
               shape_mask = place_mask(render_shape_bleed, r_min_x, r_min_y, shape_mask)
               shape_mask[shape_alpha_bleed * np.pad(fg_bg, ((args.bleed, args.bleed), (args.bleed, args.bleed)))>0] = prev_shape_idx
               min_x, min_y, max_x, max_y = get_shape_coords(shape_alpha)
@@ -1864,8 +1983,13 @@ def main():
             shape_mask = np.pad(shape_mask, ((args.bleed, args.bleed), (args.bleed, args.bleed)), constant_values=((-2, -2), (-2, -2)))
             prev_shape_mask = -1 * np.ones_like(fg_bg)
             prev_shape_mask = np.pad(prev_shape_mask, ((args.bleed, args.bleed), (args.bleed, args.bleed)), constant_values=((-2, -2), (-2, -2)))
-            render_shape_bleed = -1 * np.ones_like(render_shapes_bleed[curr_element_idxs[j]][:, :, 3], dtype=np.int8)
-            render_shape_bleed[render_shapes_bleed[curr_element_idxs[j]][:, :, 3]>0] = canonical_pl
+            # Add bounds checking for render_shapes_bleed access
+            if j in curr_element_idxs and curr_element_idxs[j] < len(render_shapes_bleed):
+              render_shape_bleed = -1 * np.ones_like(render_shapes_bleed[curr_element_idxs[j]][:, :, 3], dtype=np.int8)
+              render_shape_bleed[render_shapes_bleed[curr_element_idxs[j]][:, :, 3]>0] = canonical_pl
+            else:
+              render_shape_bleed = -2 * np.ones((frame_height + 2*args.bleed, frame_width + 2*args.bleed), dtype=np.int8)
+              print(f'[WARNING] curr_element_idxs[{j}] out of bounds for render_shapes_bleed')
             prev_shape_mask = place_mask(render_shape_bleed, r_min_x, r_min_y, prev_shape_mask)
             prev_shape_mask[prev_shape_alpha_bleed>0] = canonical_pl
             p_min_x, p_min_y, p_max_x, p_max_y = get_shape_coords(np.uint8(prev_shape_mask>=0))

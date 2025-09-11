@@ -405,7 +405,7 @@ def main():
         prev_shape = shape_bank.get(prev_shape_idx) if shape_bank is not None else None
         optim_data = optim_bank.get(prev_shape_idx) if optim_bank is not None else None
         if optim_data is not None and isinstance(optim_data, dict) and 'centroid' in optim_data:
-          centroid_data = optim_data['centroid']
+          centroid_data = optim_data.get('centroid')
           if centroid_data is not None and hasattr(centroid_data, '__len__') and len(centroid_data) >= 2:
             try:
               cx, cy = float(centroid_data[0]), float(centroid_data[1])
@@ -421,8 +421,12 @@ def main():
         if prev_shape is not None and hasattr(prev_shape, 'shape') and len(prev_shape.shape) >= 3:
           try:
             if prev_shape.shape[2] > 3:
-              min_x, min_y, max_x, max_y = get_shape_coords(prev_shape[:, :, 3])
-              prev_shapes.append(prev_shape[min_y:max_y, min_x:max_x])
+              shape_coords = get_shape_coords(prev_shape[:, :, 3])
+              if shape_coords is not None and len(shape_coords) == 4:
+                min_x, min_y, max_x, max_y = shape_coords
+                prev_shapes.append(prev_shape[min_y:max_y, min_x:max_x])
+              else:
+                prev_shapes.append(np.zeros((10, 10, 4), dtype=np.uint8))
             else:
               prev_shapes.append(np.zeros((10, 10, 4), dtype=np.uint8))
           except (IndexError, AttributeError):
@@ -438,7 +442,10 @@ def main():
         if curr_shape_alpha_proc is not None:
           curr_shape_alpha = curr_shape_alpha_proc[..., None]
         else:
-          curr_shape_alpha = curr_shape_alpha[..., None]
+          if hasattr(curr_shape_alpha, 'shape') and len(curr_shape_alpha.shape) >= 2:
+            curr_shape_alpha = curr_shape_alpha[..., None]
+          else:
+            curr_shape_alpha = np.array(curr_shape_alpha)[..., None]
         curr_shape = curr_shape_alpha * curr_frame + (1 - curr_shape_alpha) * (bg_img if bg_img is not None else np.zeros_like(curr_frame))
         curr_shape = np.uint8(np.dstack([curr_shape, 255 * curr_shape_alpha]))
         curr_shape_coords = get_shape_coords(curr_shape[:, :, 3])
@@ -448,6 +455,8 @@ def main():
           min_x, min_y, max_x, max_y = 0, 0, curr_shape.shape[1], curr_shape.shape[0]
         curr_shapes.append(curr_shape[min_y:max_y, min_x:max_x])
         centroid_coords = get_shape_centroid(curr_shape[:, :, 3])
+        if centroid_coords is None:
+          centroid_coords = [(min_x + max_x) / 2, (min_y + max_y) / 2]
         if isinstance(centroid_coords, (list, tuple)) and len(centroid_coords) >= 2:
           cx, cy = centroid_coords[0], centroid_coords[1]
         else:
@@ -605,7 +614,7 @@ def main():
           unmatched_prev_shape = shape_bank.get(prev_shape_idx) if shape_bank is not None else None
           optim_data = optim_bank.get(prev_shape_idx) if optim_bank is not None else None
           if optim_data is not None and isinstance(optim_data, dict) and 'centroid' in optim_data:
-            centroid_data = optim_data['centroid']
+            centroid_data = optim_data.get('centroid')
             if centroid_data is not None and len(centroid_data) >= 2:
               cx, cy = centroid_data[:2]
               unmatched_prev_centroids.append([cx / frame_width, cy / frame_height])
@@ -614,11 +623,15 @@ def main():
           else:
             unmatched_prev_centroids.append([0.5, 0.5])
           
-          if unmatched_prev_shape is not None and hasattr(unmatched_prev_shape, 'shape') and len(unmatched_prev_shape.shape) >= 3:
+          if unmatched_prev_shape is not None and isinstance(unmatched_prev_shape, np.ndarray) and hasattr(unmatched_prev_shape, 'shape') and len(unmatched_prev_shape.shape) >= 3:
             try:
               if unmatched_prev_shape.shape[2] > 3:
-                min_x, min_y, max_x, max_y = get_shape_coords(unmatched_prev_shape[:, :, 3])
-                unmatched_prev_shapes.append(unmatched_prev_shape[min_y:max_y, min_x:max_x])
+                shape_coords = get_shape_coords(unmatched_prev_shape[:, :, 3])
+                if shape_coords is not None and len(shape_coords) == 4:
+                  min_x, min_y, max_x, max_y = shape_coords
+                  unmatched_prev_shapes.append(unmatched_prev_shape[min_y:max_y, min_x:max_x])
+                else:
+                  unmatched_prev_shapes.append(np.zeros((10, 10, 4), dtype=np.uint8))
               else:
                 unmatched_prev_shapes.append(np.zeros((10, 10, 4), dtype=np.uint8))
             except (IndexError, AttributeError):
@@ -629,7 +642,8 @@ def main():
         unmatched_curr_centroids = []
         for j in unmatched_curr:
           curr_shape_idx = curr_labels[j]
-          unmatched_curr_shape_alpha = np.uint8(curr_fg_labels==curr_shape_idx)[..., None]
+          curr_mask = np.uint8(curr_fg_labels==curr_shape_idx)
+          unmatched_curr_shape_alpha = curr_mask[..., None] if hasattr(curr_mask, 'shape') else np.array(curr_mask)[..., None]
           unmatched_curr_shape = unmatched_curr_shape_alpha * curr_frame + (1 - unmatched_curr_shape_alpha) * (bg_img if bg_img is not None else np.zeros_like(curr_frame))
           unmatched_curr_shape = np.dstack([unmatched_curr_shape, unmatched_curr_shape_alpha])
           min_x, min_y, max_x, max_y = get_shape_coords(unmatched_curr_shape[:, :, 3])
@@ -758,9 +772,11 @@ def main():
         total_prev_shapes = []
         total_curr_shapes = []
         for prev_comp_idx in prev_comps:
-          total_prev_shapes.extend(prev_fg_comp_to_label[prev_comp_idx])
+          if prev_fg_comp_to_label is not None and prev_comp_idx in prev_fg_comp_to_label:
+            total_prev_shapes.extend(prev_fg_comp_to_label[prev_comp_idx])
         for curr_comp_idx in curr_comps:
-          total_curr_shapes.extend(curr_fg_comp_to_label[curr_comp_idx])
+          if curr_fg_comp_to_label is not None and curr_comp_idx in curr_fg_comp_to_label:
+            total_curr_shapes.extend(curr_fg_comp_to_label[curr_comp_idx])
         if len(total_prev_shapes) == 0 or len(total_curr_shapes) == 0:
           continue
         # We also want to optimize any shapes that are at the border (skip optimization if both 
@@ -984,7 +1000,7 @@ def main():
         [0.0] * len(elements), # ky
         frame_width, 
         frame_height,
-        bg=np.tile(np.transpose(bg_img / 255.0, (2, 0, 1)), [len(elements), 1, 1, 1]),
+        bg=np.tile(np.transpose((bg_img if bg_img is not None else np.zeros((frame_height, frame_width, 3), dtype=np.uint8)) / 255.0, (2, 0, 1)), [len(elements), 1, 1, 1]),
         keep_alpha=True,
         device=device
       )
@@ -1007,9 +1023,11 @@ def main():
         total_prev_shapes = []
         total_curr_shapes = []
         for prev_comp_idx in prev_comps:
-          total_prev_shapes.extend(prev_fg_comp_to_label[prev_comp_idx])
+          if prev_fg_comp_to_label is not None and prev_comp_idx in prev_fg_comp_to_label:
+            total_prev_shapes.extend(prev_fg_comp_to_label[prev_comp_idx])
         for curr_comp_idx in curr_comps:
-          total_curr_shapes.extend(curr_fg_comp_to_label[curr_comp_idx])
+          if curr_fg_comp_to_label is not None and curr_comp_idx in curr_fg_comp_to_label:
+            total_curr_shapes.extend(curr_fg_comp_to_label[curr_comp_idx])
         if len(total_prev_shapes) == 0 or len(total_curr_shapes) == 0:
           continue
         if len(total_prev_shapes) == 1 and len(total_curr_shapes) == 1:
@@ -1471,7 +1489,7 @@ def main():
               if (optim_bank is not None and prev_shape_idx in optim_bank and 
                   isinstance(optim_bank[prev_shape_idx], dict) and 
                   'h' in optim_bank[prev_shape_idx]):
-                new_h = np.linalg.inv(new_mat) @ optim_bank[prev_shape_idx]['h']
+                new_h = np.linalg.inv(new_mat) @ optim_bank[prev_shape_idx].get('h', np.eye(3))
               else:
                 new_h = np.linalg.inv(new_mat)  # Fallback if optim_bank unavailable
               r_min_x, r_min_y, r_max_x, r_max_y = target_bounds[curr_target_idxs[j]]
@@ -1573,16 +1591,23 @@ def main():
               if (optim_bank is not None and prev_shape_idx in optim_bank and 
                   isinstance(optim_bank[prev_shape_idx], dict) and 
                   'h' in optim_bank[prev_shape_idx]):
-                new_h = optim_bank[prev_shape_idx]['h']
+                new_h = optim_bank[prev_shape_idx].get('h', np.eye(3))
               else:
                 new_h = np.eye(3)  # Fallback to identity matrix
               shape_mask = -1 * np.ones_like(fg_bg)
               shape_mask[shape_alpha * fg_bg>0] = prev_shape_idx
               shape_mask = np.pad(shape_mask, ((args.bleed, args.bleed), (args.bleed, args.bleed)), constant_values=((-2, -2), (-2, -2)))
-              min_x, min_y, max_x, max_y = get_shape_coords(shape_alpha)
-              shape_rgb = curr_frame * shape_alpha[..., None] + bg_img * (1 - shape_alpha[..., None])
+              shape_coords = get_shape_coords(shape_alpha)
+              if shape_coords is not None and len(shape_coords) == 4:
+                min_x, min_y, max_x, max_y = shape_coords
+              else:
+                min_x, min_y, max_x, max_y = 0, 0, 10, 10
+              bg_img_safe = bg_img if bg_img is not None else np.zeros_like(curr_frame)
+              shape_rgb = curr_frame * shape_alpha[..., None] + bg_img_safe * (1 - shape_alpha[..., None])
               shape = np.uint8(np.dstack([shape_rgb, 255 * shape_alpha]))
               centroid = get_shape_centroid(shape_alpha)
+              if centroid is None:
+                centroid = [(min_x + max_x) / 2, (min_y + max_y) / 2]
               time_bank['shapes'][t][prev_shape_idx] = {
                 'coords': np.array([[min_x, min_y], [max_x, max_y]]),
                 'centroid': centroid,
@@ -1691,6 +1716,8 @@ def main():
               shape_mask[shape_alpha_bleed * np.pad(fg_bg, ((args.bleed, args.bleed), (args.bleed, args.bleed)))>0] = prev_shape_idx
               min_x, min_y, max_x, max_y = get_shape_coords(shape_alpha)
               centroid = get_shape_centroid(shape_alpha)
+              if centroid is None:
+                centroid = [(min_x + max_x) / 2, (min_y + max_y) / 2]
               shape_rgb = curr_frame * shape_alpha[..., None] + bg_img * (1 - shape_alpha[..., None])
               shape = np.uint8(np.dstack([shape_rgb, 255 * shape_alpha]))
               # Safely access optimization parameters

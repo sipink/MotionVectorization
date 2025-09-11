@@ -43,10 +43,11 @@ if eval == 1:
       os.makedirs(diff_folder)
 
     cmap = matplotlib.colors.LinearSegmentedColormap.from_list('', ["blue", "cyan", "orange", "yellow"])
-    norm = plt.Normalize(0, 1.5)
+    norm = matplotlib.colors.Normalize(0, 1.5)
     frames = get_numbers(orig_folder)
     total_video_error = 0
     prev_frame = 0
+    frame = 0  # Initialize frame variable to avoid unbound errors
     for frame in tqdm(frames):
       recon = cv2.imread(os.path.join(recon_folder, f'{frame:03d}.png'))
       orig = cv2.imread(os.path.join(orig_folder, f'{frame:03d}.png'))
@@ -71,9 +72,12 @@ if eval == 1:
       plt.close()
       prev_frame = frame
 
-    avg_video_error = total_video_error / frame
-    num_frames += frame
-    print(f'Avg error: {avg_video_error:.4f}')
+    if frames:  # Only compute if we processed any frames
+      avg_video_error = total_video_error / frame
+      num_frames += frame
+      print(f'Avg error: {avg_video_error:.4f}')
+    else:
+      print('No frames found for evaluation')
   all_video_error = total_error / num_frames
   print(f'Avg pixel error over {num_frames} frames = {all_video_error:.4f}')
 

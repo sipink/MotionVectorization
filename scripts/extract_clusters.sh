@@ -18,7 +18,7 @@ echo "   Input: $VIDEO_LIST"
 python3 -c "
 import sys
 sys.path.append('.')
-from motion_vectorization.unified_pipeline import UnifiedMotionVectorizationPipeline
+from motion_vectorization.unified_pipeline import UnifiedMotionPipeline
 from motion_vectorization.unified_pipeline import UnifiedPipelineConfig
 
 # Create unified pipeline config
@@ -30,7 +30,7 @@ config = UnifiedPipelineConfig(
 )
 
 # Initialize pipeline
-pipeline = UnifiedMotionVectorizationPipeline(config)
+pipeline = UnifiedMotionPipeline(config)
 
 print('✅ Extract clusters delegated to unified pipeline')
 "

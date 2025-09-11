@@ -326,9 +326,13 @@ def main():
                   # Add a few rectangular regions as "objects" 
                   center_y, center_x = frame_height // 2, frame_width // 2
                   
-                  # Region 1: Central object
-                  y1, y2 = center_y - 50, center_y + 50
-                  x1, x2 = center_x - 60, center_x + 60
+                  # Region 1: Central object (scaled to frame size)
+                  obj_height = min(100, frame_height // 5)
+                  obj_width = min(120, frame_width // 7)
+                  y1 = max(0, center_y - obj_height // 2)
+                  y2 = min(frame_height, center_y + obj_height // 2)
+                  x1 = max(0, center_x - obj_width // 2)
+                  x2 = min(frame_width, center_x + obj_width // 2)
                   if 'labels' in placeholder_dir:
                       placeholder_array[y1:y2, x1:x2] = 1  # Object label 1
                   elif 'fgbg' in placeholder_dir:
@@ -336,9 +340,14 @@ def main():
                   else:  # comps
                       placeholder_array[y1:y2, x1:x2] = 1  # Component 1
                   
-                  # Region 2: Secondary object
-                  y3, y4 = center_y - 30, center_y + 30
-                  x3, x4 = center_x + 100, center_x + 160
+                  # Region 2: Secondary object (scaled to frame size)
+                  obj2_height = min(60, frame_height // 8)
+                  obj2_width = min(60, frame_width // 10)
+                  offset_x = min(100, frame_width // 8)
+                  y3 = max(0, center_y - obj2_height // 2)
+                  y4 = min(frame_height, center_y + obj2_height // 2)
+                  x3 = max(0, min(frame_width - obj2_width, center_x + offset_x))
+                  x4 = min(frame_width, x3 + obj2_width)
                   if 'labels' in placeholder_dir:
                       placeholder_array[y3:y4, x3:x4] = 2  # Object label 2
                   elif 'fgbg' in placeholder_dir:

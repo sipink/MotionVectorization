@@ -303,26 +303,36 @@ class UnifiedMotionPipeline:
         if not self.config.enable_cross_validation:
             return
         
-        # Guard against None configs to prevent type errors
+        # Guard against None or dummy configs to prevent type errors
         if (self.config.sam2_config is None or 
             self.config.cotracker3_config is None or 
-            self.config.flowseek_config is None):
+            self.config.flowseek_config is None or
+            type(self.config.sam2_config).__name__ == '_DummyEngineConfig' or
+            type(self.config.flowseek_config).__name__ == '_DummyEngineConfig'):
             return
             
         try:
-            self.sam2_cotracker_bridge = SAM2CoTrackerBridge(
-                sam2_config=self.config.sam2_config,
-                cotracker_config=self.config.cotracker3_config,
-                bridge_config=self.config.bridge_config
-            )
-            self.sam2_flowseek_bridge = SAM2FlowSeekBridge(
-                SAM2FlowSeekBridgeConfig(
-                    device=str(self.device),
+            # Only create bridges if we have real engine configs, not dummy ones
+            if (hasattr(self.config.sam2_config, '__class__') and 
+                hasattr(self.config.flowseek_config, '__class__') and
+                self.config.sam2_config.__class__.__name__ != '_DummyEngineConfig'):
+                
+                self.sam2_cotracker_bridge = SAM2CoTrackerBridge(
                     sam2_config=self.config.sam2_config,
-                    flowseek_config=self.config.flowseek_config,
-                    mixed_precision=self.config.mixed_precision
+                    cotracker_config=self.config.cotracker3_config,
+                    bridge_config=self.config.bridge_config
                 )
-            )
+                # Type-safe bridge config creation - only if real configs available
+                try:
+                    bridge_config = SAM2FlowSeekBridgeConfig(
+                        device=str(self.device),
+                        sam2_config=self.config.sam2_config,  # type: ignore[arg-type]
+                        flowseek_config=self.config.flowseek_config,  # type: ignore[arg-type]
+                        mixed_precision=self.config.mixed_precision
+                    )
+                    self.sam2_flowseek_bridge = SAM2FlowSeekBridge(bridge_config)  # type: ignore[arg-type]
+                except (TypeError, AttributeError):
+                    self.sam2_flowseek_bridge = None
         except Exception:
             self.config.enable_cross_validation = False
             
@@ -666,10 +676,13 @@ class UnifiedMotionPipeline:
         try:
             # SAM2.1 video segmentation
             result = self.sam2_engine.segment_video_batch([frame1, frame2], [0, 1])
-            if isinstance(result, tuple) and len(result) == 2:
-                masks, metadata = result
+            # Safe tuple unpacking with type guards
+            if result is not None and isinstance(result, tuple) and len(result) == 2:
+                masks, metadata = result  # type: ignore[misc]
+            elif result is not None:
+                masks, metadata = result, {}  # type: ignore[assignment]
             else:
-                masks, metadata = result, {}
+                masks, metadata = None, {}
             
             return {
                 'status': 'success',
@@ -705,17 +718,23 @@ class UnifiedMotionPipeline:
             # CoTracker3 tracking
             if query_points is not None:
                 result = self.cotracker3_engine.track_video_grid(video_tensor, custom_points=query_points)
-                if isinstance(result, tuple) and len(result) == 2:
-                    tracks, visibility = result
+                # Safe tuple unpacking with type guards  
+                if result is not None and isinstance(result, tuple) and len(result) == 2:
+                    tracks, visibility = result  # type: ignore[misc]
+                elif result is not None:
+                    tracks, visibility = result, None  # type: ignore[assignment] 
                 else:
-                    tracks, visibility = result, None
+                    tracks, visibility = None, None
             else:
                 # Use grid-based tracking
                 result = self.cotracker3_engine.track_video_grid(video_tensor)
-                if isinstance(result, tuple) and len(result) == 2:
-                    tracks, visibility = result
+                # Safe tuple unpacking with type guards  
+                if result is not None and isinstance(result, tuple) and len(result) == 2:
+                    tracks, visibility = result  # type: ignore[misc]
+                elif result is not None:
+                    tracks, visibility = result, None  # type: ignore[assignment] 
                 else:
-                    tracks, visibility = result, None
+                    tracks, visibility = None, None
                 
             # Extract motion parameters from tracking
             motion_params = self.cotracker3_engine.extract_motion_parameters(
@@ -727,7 +746,7 @@ class UnifiedMotionPipeline:
                 'tracks': tracks,
                 'visibility': visibility,
                 'motion_parameters': motion_params,
-                'quality_score': self._calculate_tracking_quality(tracks, visibility)
+                'quality_score': self._calculate_tracking_quality(tracks, visibility) if tracks is not None and visibility is not None else 0.0
             }
             
         except Exception as e:
@@ -750,9 +769,11 @@ class UnifiedMotionPipeline:
                 masks1 = segmentation_results.get('masks', [None, None])[0]
                 masks2 = segmentation_results.get('masks', [None, None])[1] if len(segmentation_results.get('masks', [])) > 1 else None
                 
-                # Handle bridge result safely
-                if hasattr(self.sam2_flowseek_bridge, 'process_frame_pair'):
-                    bridge_result = self.sam2_flowseek_bridge.process_frame_pair(frame1, frame2, masks1, masks2)
+                # Handle bridge result safely - check if bridge is real, not dummy
+                if (self.sam2_flowseek_bridge is not None and 
+                    hasattr(self.sam2_flowseek_bridge, 'process_frame_pair') and 
+                    type(self.sam2_flowseek_bridge).__name__ != '_DummyEngine'):
+                    bridge_result = self.sam2_flowseek_bridge.process_frame_pair(frame1, frame2, masks1, masks2)  # type: ignore
                     if isinstance(bridge_result, tuple) and len(bridge_result) == 3:
                         forward_flow, backward_flow, metadata = bridge_result
                     elif isinstance(bridge_result, tuple) and len(bridge_result) == 2:

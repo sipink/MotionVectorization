@@ -803,32 +803,3 @@ def create_sam2_cotracker_bridge(
     
     return SAM2CoTrackerBridge(sam2_config, cotracker_config, bridge_config)
 
-
-if __name__ == "__main__":
-    # Demo usage
-    print("🌉 SAM2-CoTracker3 Bridge Demo")
-    
-    # Create bridge
-    bridge = create_sam2_cotracker_bridge(
-        sam2_accuracy="high",
-        cotracker_mode="offline", 
-        contour_density=25
-    )
-    
-    # Create test video
-    test_video = torch.randn(1, 30, 3, 480, 640)  # 30 frames
-    
-    # Process video (would need real prompts for actual segmentation)
-    print("🎬 Processing test video...")
-    results = bridge.process_video(test_video, prompts=None)
-    
-    print(f"📊 Results: {len(results['motion_parameters'])} objects tracked")
-    print(f"⚡ Performance: {results['fps']:.1f} FPS")
-    
-    # Performance report
-    report = bridge.get_performance_report()
-    print(f"🏆 Bridge rating: {report['performance_rating']}")
-    
-    # Cleanup
-    bridge.cleanup()
-    print("✅ Demo completed successfully")

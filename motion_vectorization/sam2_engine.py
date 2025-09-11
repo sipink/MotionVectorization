@@ -608,21 +608,3 @@ def convert_to_clusters(
     
     return final_labels - 1, labels_vis  # Subtract 1 to match existing format
 
-
-if __name__ == "__main__":
-    # Test the engine
-    print("🧪 Testing SAM2.1 Segmentation Engine")
-    
-    engine = create_sam2_engine()
-    
-    # Create test frame
-    test_frame = np.random.randint(0, 255, (480, 640, 3), dtype=np.uint8)
-    
-    # Test segmentation
-    mask, metadata = sam2_segment_frame(engine, test_frame)
-    
-    print(f"✅ Test completed")
-    print(f"📊 Method: {metadata['method']}")
-    print(f"⚡ Performance: {engine.get_performance_stats()}")
-    
-    engine.cleanup()

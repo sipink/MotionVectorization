@@ -1069,36 +1069,3 @@ class Processor:
         # Fallback to appearance analysis
         return self.get_cotracker3_appearance_analysis(prev_shapes, curr_shapes, prev_centroids, curr_centroids)
 
-    # Legacy compatibility methods (minimal implementations)
-    def get_appearance_graphs(self, prev_shapes, curr_shapes, prev_centroids, curr_centroids):
-        """Legacy compatibility method - delegates to CoTracker3 analysis"""
-        return self.get_cotracker3_appearance_analysis(prev_shapes, curr_shapes, prev_centroids, curr_centroids)
-
-    @staticmethod 
-    def compute_matching_comp_groups(matching, prev_labels, curr_labels, prev_fg_comp_to_label, curr_fg_comp_to_label):
-        """Compute matching component groups using graph connectivity"""
-        ceg = nx.Graph()
-        ceg.add_nodes_from([f'p{i}' for i in prev_labels])
-        ceg.add_nodes_from([f'c{j}' for j in curr_labels])
-        ceg.add_nodes_from([f'M{c}' for c in prev_fg_comp_to_label])
-        ceg.add_nodes_from([f'N{c}' for c in curr_fg_comp_to_label])
-        for prev, curr in matching:
-            for i in prev:
-                for j in curr:
-                    ceg.add_edges_from([(f'p{prev_labels[i]}', f'c{curr_labels[j]}')])
-        for c in prev_fg_comp_to_label:
-            ceg.add_edges_from([(f'M{c}', f'p{i}') for i in prev_fg_comp_to_label[c]])
-        for c in curr_fg_comp_to_label:
-            ceg.add_edges_from([(f'N{c}', f'c{j}') for j in curr_fg_comp_to_label[c]])
-
-        matching_comp_groups = []
-        for C in nx.connected_components(ceg):
-            prev_comps = []
-            curr_comps = []
-            for v in C:
-                if v[0] == 'M':
-                    prev_comps.append(int(v[1:]))
-                if v[0] == 'N':
-                    curr_comps.append(int(v[1:]))
-            matching_comp_groups.append([prev_comps, curr_comps])
-        return matching_comp_groups, ceg

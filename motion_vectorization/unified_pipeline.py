@@ -570,78 +570,76 @@ class UnifiedMotionPipeline:
             'performance_metrics': {}
         }
         
-        with self.memory_manager:
-            try:
-                # Step 1: SAM2.1 Segmentation
-                seg_start = time.time()
-                segmentation_results = self._process_segmentation(frame1, frame2)
-                results['segmentation'] = segmentation_results
-                results['processing_times']['segmentation'] = time.time() - seg_start
+        try:
+            # Step 1: SAM2.1 Segmentation
+            seg_start = time.time()
+            segmentation_results = self._process_segmentation(frame1, frame2)
+            results['segmentation'] = segmentation_results
+            results['processing_times']['segmentation'] = time.time() - seg_start
+            
+            # Step 2: CoTracker3 Tracking (using SAM2.1 masks)
+            track_start = time.time()
+            tracking_results = self._process_tracking(
+                frame1, frame2, segmentation_results
+            )
+            results['tracking'] = tracking_results
+            results['processing_times']['tracking'] = time.time() - track_start
+            
+            # Step 3: FlowSeek Optical Flow (SAM2.1-guided)
+            flow_start = time.time()
+            flow_results = self._process_optical_flow(
+                frame1, frame2, segmentation_results, tracking_results
+            )
+            results['optical_flow'] = flow_results
+            results['processing_times']['optical_flow'] = time.time() - flow_start
+            
+            # Step 4: Motion Parameter Extraction
+            motion_start = time.time()
+            motion_results = self._extract_motion_parameters(
+                segmentation_results, tracking_results, flow_results
+            )
+            results['motion_parameters'] = motion_results
+            results['processing_times']['motion_extraction'] = time.time() - motion_start
+            
+            # Step 5: Cross-Validation (if enabled)
+            if self.config.enable_cross_validation:
+                cv_start = time.time()
+                cross_validation_results = self._cross_validate_results(results)
+                results['cross_validation'] = cross_validation_results
+                results['processing_times']['cross_validation'] = time.time() - cv_start
+            
+            # Step 6: Advanced Quality Assessment (with SIGGRAPH 2025 enhancements)
+            quality_results = _assess_quality(results)
+            results['quality_scores'] = quality_results
+            
+            # Step 6b: Neural Motion Refinement (if quality below threshold)
+            if quality_results.get('overall_quality', 0) < self.config.quality_threshold:
+                refined_motion = self._apply_neural_motion_refinement(results)
+                if refined_motion:
+                    results['motion_parameters'] = refined_motion
+                    # Re-assess quality after refinement
+                    quality_results = _assess_quality(results)
+                    results['quality_scores'] = quality_results
+            
+            # Step 7: Performance Metrics
+            total_time = time.time() - start_time
+            results['performance_metrics'] = {
+                'total_processing_time': total_time,
+                'fps': 1.0 / total_time,
+                'memory_usage_mb': 0.0,
+                'gpu_utilization': self._get_gpu_utilization() if self.device.type == 'cuda' else 0
+            }
+            
+            # Update global statistics
+            self._update_performance_stats(results)
+            
+            results['status'] = 'success'
+            results['overall_quality'] = quality_results.get('overall_quality', 0.0)
                 
-                # Step 2: CoTracker3 Tracking (using SAM2.1 masks)
-                track_start = time.time()
-                tracking_results = self._process_tracking(
-                    frame1, frame2, segmentation_results
-                )
-                results['tracking'] = tracking_results
-                results['processing_times']['tracking'] = time.time() - track_start
-                
-                # Step 3: FlowSeek Optical Flow (SAM2.1-guided)
-                flow_start = time.time()
-                flow_results = self._process_optical_flow(
-                    frame1, frame2, segmentation_results, tracking_results
-                )
-                results['optical_flow'] = flow_results
-                results['processing_times']['optical_flow'] = time.time() - flow_start
-                
-                # Step 4: Motion Parameter Extraction
-                motion_start = time.time()
-                motion_results = self._extract_motion_parameters(
-                    segmentation_results, tracking_results, flow_results
-                )
-                results['motion_parameters'] = motion_results
-                results['processing_times']['motion_extraction'] = time.time() - motion_start
-                
-                # Step 5: Cross-Validation (if enabled)
-                if self.config.enable_cross_validation:
-                    cv_start = time.time()
-                    cross_validation_results = self._cross_validate_results(results)
-                    results['cross_validation'] = cross_validation_results
-                    results['processing_times']['cross_validation'] = time.time() - cv_start
-                
-                # Step 6: Advanced Quality Assessment (with SIGGRAPH 2025 enhancements)
-                quality_results = _assess_quality(results)
-                results['quality_scores'] = quality_results
-                
-                # Step 6b: Neural Motion Refinement (if quality below threshold)
-                if quality_results.get('overall_quality', 0) < self.config.quality_threshold:
-                    refined_motion = self._apply_neural_motion_refinement(results)
-                    if refined_motion:
-                        results['motion_parameters'] = refined_motion
-                        # Re-assess quality after refinement
-                        quality_results = _assess_quality(results)
-                        results['quality_scores'] = quality_results
-                
-                # Step 7: Performance Metrics
-                total_time = time.time() - start_time
-                results['performance_metrics'] = {
-                    'total_processing_time': total_time,
-                    'fps': 1.0 / total_time,
-                    'memory_usage_mb': 0.0,
-                    'gpu_utilization': self._get_gpu_utilization() if self.device.type == 'cuda' else 0
-                }
-                
-                # Update global statistics
-                self._update_performance_stats(results)
-                
-                results['status'] = 'success'
-                results['overall_quality'] = quality_results.get('overall_quality', 0.0)
-                
-            except Exception:
-                pass
-                results['status'] = 'failed'
-                results['error'] = str(e)
-                results['overall_quality'] = 0.0
+        except Exception as e:
+            results['status'] = 'failed'
+            results['error'] = str(e)
+            results['overall_quality'] = 0.0
         
         return results
         
@@ -1426,10 +1424,5 @@ __all__ = [
     'FlowSeekConfig',
     'BridgeConfig',
     'SAM2FlowSeekBridgeConfig',
-    'create_unified_pipeline',
-    'create_speed_pipeline',
-    'create_balanced_pipeline',
-    'create_accuracy_pipeline',
-    'TemporalConsistencyValidator',
-    'GPUMemoryManager'
+    'create_unified_pipeline'
 ]

@@ -880,33 +880,3 @@ def create_cotracker3_engine(
     
     return CoTracker3TrackerEngine(config)
 
-
-if __name__ == "__main__":
-    # Demo usage and validation
-    print("🎬 CoTracker3 Engine Demo")
-    
-    # Create engine
-    engine = create_cotracker3_engine(mode="offline", grid_size=20)
-    
-    # Create test video
-    test_video = torch.randn(1, 50, 3, 480, 640)  # 50 frames, 480x640
-    
-    # Track grid points
-    print("📍 Testing grid tracking...")
-    tracks, visibility = engine.track_video_grid(test_video, grid_size=20)
-    print(f"   Tracked {tracks.shape[2]} points across {tracks.shape[1]} frames")
-    
-    # Extract motion parameters
-    print("🎯 Extracting motion parameters...")
-    motion_params = engine.extract_motion_parameters(tracks, visibility)
-    print(f"   Translation range: {motion_params['translation'].abs().max().item():.2f}")
-    
-    # Performance report
-    report = engine.get_performance_report()
-    print(f"📊 Performance: {report['performance_rating']}")
-    print(f"   FPS: {report['average_fps']:.1f}")
-    print(f"   Accuracy: {report['average_accuracy']:.3f}")
-    
-    # Cleanup
-    engine.cleanup()
-    print("✅ Demo completed successfully")

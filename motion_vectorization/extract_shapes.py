@@ -303,20 +303,27 @@ def main():
           frame_height, frame_width = 512, 840
           print(f"   Using default dimensions: {frame_height}×{frame_width}")
       
+      # Clean up any existing placeholder files first to ensure correct dimensions
+      print("   Cleaning up old placeholder files...")
+      for placeholder_dir in placeholder_dirs:
+          if os.path.exists(placeholder_dir):
+              for file in os.listdir(placeholder_dir):
+                  if file.endswith('.npy'):
+                      os.remove(os.path.join(placeholder_dir, file))
+                      
       for placeholder_dir in placeholder_dirs:
           os.makedirs(placeholder_dir, exist_ok=True)
           # Create properly-sized placeholder .npy files for each frame
           for rgb_file in rgb_files:
               frame_num = rgb_file.split('.')[0]  # e.g. '001' from '001.png'
               placeholder_path = os.path.join(placeholder_dir, f"{frame_num}.npy")
-              if not os.path.exists(placeholder_path):
-                  # Create placeholder data with correct dimensions
-                  if 'labels' in placeholder_dir or 'fgbg' in placeholder_dir or 'comps' in placeholder_dir:
-                      # Segmentation arrays matching frame dimensions
-                      np.save(placeholder_path, np.zeros((frame_height, frame_width), dtype=np.uint8))
-                  else:  # flow directories
-                      # Flow arrays matching frame dimensions
-                      np.save(placeholder_path, np.zeros((frame_height, frame_width, 2), dtype=np.float32))
+              # Always create/overwrite to ensure correct dimensions
+              if 'labels' in placeholder_dir or 'fgbg' in placeholder_dir or 'comps' in placeholder_dir:
+                  # Segmentation arrays matching frame dimensions
+                  np.save(placeholder_path, np.zeros((frame_height, frame_width), dtype=np.uint8))
+              else:  # flow directories
+                  # Flow arrays matching frame dimensions
+                  np.save(placeholder_path, np.zeros((frame_height, frame_width, 2), dtype=np.float32))
       
       print("✅ Created placeholder files for unified pipeline compatibility")
 

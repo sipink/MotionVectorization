@@ -44,7 +44,7 @@ def place_shape(shapes, cxs, cys, sxs, sys, thetas, kxs, kys, frame_width, frame
   origin = torch.stack([
     torch.tensor(local_cxs, dtype=torch.float64, device=device), 
     torch.tensor(local_cys, dtype=torch.float64, device=device)
-  ], axis=1) / max(frame_height, frame_width)
+  ], dim=1) / max(frame_height, frame_width)
   shape_bgs = sampling_layer(
     shape_bgs, 
     torch.tensor(txs, dtype=torch.float64, device=device), 
@@ -73,7 +73,7 @@ def init_optimizer(parameters, lr):
 
 
 def corr_loss(input, target):
-  cost = 0.0
+  cost = torch.tensor(0.0, device=input.device, dtype=input.dtype)
   for i in range(input.shape[1]):
     vx = input[0, i].flatten() - torch.mean(input[0, i].flatten())
     vy = target[0, i].flatten() - torch.mean(target[0, i].flatten())
@@ -107,7 +107,7 @@ def loss_fn(render, target, c_variables, layer_z=None, default_variables=None, d
     mask = kornia.filters.gaussian_blur2d(render[:, 3:4, :, :], (2 * blur_kernel + 1, 2 * blur_kernel + 1), (2 * blur_kernel + 1, 2 * blur_kernel + 1))
   rgb_loss = c_loss_fn(render[:, :3, :, :], target[0][:, :3, :, :])
   alpha_loss = c_loss_fn(render[:, 3:4, :, :], target[0][:, 3:4, :, :])
-  if use_mask:
+  if use_mask and mask is not None:
     rgb_loss = torch.mean(mask * rgb_loss)
     alpha_loss = torch.mean(mask * alpha_loss)
   else:
@@ -122,7 +122,7 @@ def loss_fn(render, target, c_variables, layer_z=None, default_variables=None, d
   if single_scale:
     return rgb_loss, rgb_scales_loss, alpha_loss, alpha_scales_loss, params_loss
   render_d = render.clone()
-  mask_d = mask.clone() if use_mask else None
+  mask_d = mask.clone() if use_mask and mask is not None else None
   for i in range(1, len(target)):
     render_d = dsample(render_d)
     render_d = kornia.filters.gaussian_blur2d(render_d, (blur_kernel, blur_kernel), (blur_kernel, blur_kernel))
@@ -131,7 +131,7 @@ def loss_fn(render, target, c_variables, layer_z=None, default_variables=None, d
       mask_d = kornia.filters.gaussian_blur2d(mask_d, (blur_kernel, blur_kernel), (blur_kernel, blur_kernel))
     rgb_scales_loss_ = c_loss_fn(render_d[:, :3, :, :], target[i][:, :3, :, :])
     alpha_scales_loss_ = c_loss_fn(render_d[:, 3:4, :, :], target[i][:, 3:4, :, :])
-    if use_mask:
+    if use_mask and mask_d is not None:
       rgb_scales_loss += torch.mean(mask_d * rgb_scales_loss_, dim=[1, 2, 3])
       alpha_scales_loss += torch.mean(mask_d * alpha_scales_loss_, dim=[1, 2, 3])
     else:
@@ -166,7 +166,7 @@ def composite_layers(
   for comp_idx in groups:
     render_all = render[groups[comp_idx]]
     n_soft_elements = len(groups[comp_idx])
-    alpha, _ = torch.max(render_all[:, 3:4, :, :], dim=0, keepdims=True)
+    alpha, _ = torch.max(render_all[:, 3:4, :, :], dim=0, keepdim=True)
     if layer_z is None:
       alpha_z = render_all[:, 3:4, :, :]
     else:
@@ -200,7 +200,7 @@ def compute_sdf(alpha, res=4):
   xs = torch.linspace(-1, 1, cn, dtype=torch.float64)
   ys = torch.linspace(-1, 1, rn, dtype=torch.float64)
   grid_x, grid_y = torch.meshgrid(ys, xs)
-  grid = torch.stack([grid_y, grid_x], axis=-1).unsqueeze(0)
+  grid = torch.stack([grid_y, grid_x], dim=-1).unsqueeze(0)
   
   # Get the closest distance to region.
   sc = torch.tensor([[h, w]])
@@ -208,7 +208,7 @@ def compute_sdf(alpha, res=4):
   region_mask = 100 * (torch.sigmoid(100 * (torch.abs(region_s) - 0.99))).view(-1, 1)
   xs_ = torch.linspace(0, 1, cn, dtype=torch.float64)
   ys_ = torch.linspace(0, 1, rn, dtype=torch.float64)
-  coords = torch.stack(torch.meshgrid(ys_, xs_), axis=-1).view(-1, 2)
+  coords = torch.stack(torch.meshgrid(ys_, xs_), dim=-1).view(-1, 2)
   dists = torch.cdist(coords, coords) + region_mask.T
   min_dists, _ = torch.min(dists, dim=1)
   min_dists = min_dists.view(-1, c, rn, cn)
@@ -217,7 +217,7 @@ def compute_sdf(alpha, res=4):
   full_xs = torch.linspace(-1, 1, w, dtype=torch.float64)
   full_ys = torch.linspace(-1, 1, h, dtype=torch.float64)
   full_grid_x, full_grid_y = torch.meshgrid(full_ys, full_xs)
-  full_grid = torch.stack([full_grid_y, full_grid_x], axis=-1).unsqueeze(0)
+  full_grid = torch.stack([full_grid_y, full_grid_x], dim=-1).unsqueeze(0)
   full_res = F.grid_sample(min_dists, full_grid, padding_mode='reflection')
   full_res = full_res * torch.sign(region)
   return full_res
@@ -230,12 +230,12 @@ def main():
 
   if test == 'opt':
     img = cv2.imread('data/opt_test1.png', cv2.IMREAD_UNCHANGED) / 255.0
-    img = cv2.resize(img, (128, 128))
+    img = cv2.resize(np.asarray(img, dtype=np.uint8), (128, 128))
     bg_color = np.array([250, 252, 250])
     target = cv2.imread('data/opt_test2.png', cv2.IMREAD_UNCHANGED) / 255.0
     target_bg = np.ones((target.shape[0], target.shape[1], 3)) * bg_color / 255.0
     target[:, :, :3] = target[:, :, :3] * target[:, :, 3:4] + target_bg * (1 - target[:, :, 3:4])
-    target = cv2.resize(target, (128, 128))
+    target = cv2.resize(np.asarray(target, dtype=np.uint8), (128, 128))
     gt_tensor = torch.tensor(target).permute(2, 0, 1)[None, ...]
     gt_scales = [gt_tensor.clone().to(device)]
     for i in range(3):
@@ -244,7 +244,7 @@ def main():
     elements = torch.tensor(img).permute(2, 0, 1)[None, ...]
 
     bg_color = torch.tensor(bg_color).to(device) / 255.0
-    origin = torch.stack([torch.mean(torch.stack(torch.where(elements[i, 3, :, :]>0)).float(), axis=1) for i in range(elements.shape[0])])
+    origin = torch.stack([torch.mean(torch.stack(torch.where(elements[i, 3, :, :]>0)).float(), dim=1) for i in range(elements.shape[0])])
     origin = torch.flip(origin, dims=[1])
     origin = origin.to(device)
     sc = torch.tensor([gt_tensor.shape[3], gt_tensor.shape[2]])[None, ...]
@@ -296,18 +296,23 @@ def main():
     opt_var_names = ['tx', 'ty', 'sx', 'sy', 'theta', 'kx', 'ky']
 
     render_all, alpha = composite_layers(
-      elements, best_opt_variables[:7], origin, elements.shape, bg_color,
+      elements, best_opt_variables[:7], origin, {0: list(range(elements.shape[0]))}, elements.shape, bg_color,
       layer_z=layer_z, blur=False, blur_kernel=blur_kernel, debug=False
     )
-    best_render = torch2numpy(render_all.detach().cpu())[0]
+    render_numpy = torch2numpy(render_all.detach().cpu())
+    best_render = render_numpy[0] if hasattr(render_numpy, '__len__') and len(render_numpy) > 0 else render_numpy
     gt_frame = target[:, :, :3]
     sbs = np.uint8(255 * np.concatenate([best_render, gt_frame]))
-    sbs = cv2.putText(sbs, 's0', (10, sbs.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
+    sbs_array = np.asarray(sbs, dtype=np.uint8)
+    sbs = cv2.putText(sbs_array, 's0', (10, sbs_array.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
     sbs = cv2.putText(sbs, f'{loss:.4f}', (sbs.shape[1] - 50, sbs.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
     side_by_side.append(sbs)
     comp = np.uint8(255 * np.abs(best_render - gt_frame))
-    comp = np.concatenate([comp, np.zeros([comp.shape[0], 250, 3], dtype=np.uint8)], axis=1)
-    comp = cv2.putText(comp, 's0', (10, comp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
+    if len(comp.shape) >= 2:
+        comp = np.concatenate([comp, np.zeros([comp.shape[0], 250, 3], dtype=np.uint8)], axis=1)
+    comp_array = np.asarray(comp, dtype=np.uint8)
+    if len(comp_array.shape) >= 2:
+        comp = cv2.putText(comp_array, 's0', (10, comp_array.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
     comp = cv2.putText(comp, f'loss: {loss:.4f}', (250, comp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
     for i, (opt_var, opt_var_name) in enumerate(zip(best_opt_variables, opt_var_names)):
       comp = cv2.putText(comp, f'{opt_var_name}: {best_opt_variables[i][0]:.4f}', (135, 10 * (i + 1)), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
@@ -326,13 +331,13 @@ def main():
       blur = min_loss > 5e-2
       single_scale = min_loss < 0.01
       render_all, alpha = composite_layers(
-        elements, c_variables, origin, elements.shape, bg_color,
-        layer_z=layer_z, blur=blur, blur_kernel=blur_kernel, debug=False, device=device
+        elements, c_variables, origin, {0: list(range(elements.shape[0]))}, elements.shape, bg_color,
+        layer_z=layer_z, blur=bool(blur), blur_kernel=blur_kernel, debug=False, device=device
       )
       # print(render_all.max(), gt_scale[0].max())
       rgb_loss, rgb_scales_loss, alpha_loss, alpha_scales_loss, params_loss = loss_fn(
         torch.cat([render_all, alpha], dim=1), gt_scales, opt_variables[:6], layer_z=layer_z, default_variables=default_c_vars,
-        loss_type=loss_type, single_scale=single_scale, use_mask=use_mask, p_weight=p_weight, device=device
+        loss_type=loss_type, single_scale=bool(single_scale), use_mask=use_mask, p_weight=p_weight, device=device
       )
       loss = rgb_loss + rgb_scales_loss + alpha_loss + alpha_scales_loss + params_loss
       if loss.item() < min_loss:
@@ -343,7 +348,8 @@ def main():
         best_rgb_loss = rgb_loss
         best_rgb_scales_loss = rgb_scales_loss
         best_params_loss = params_loss
-        best_render = torch2numpy(render_all.detach().cpu())[0]
+        render_numpy = torch2numpy(render_all.detach().cpu())
+        best_render = render_numpy[0] if hasattr(render_numpy, '__len__') and len(render_numpy) > 0 else render_numpy
         gt_frame = target[:, :, :3]
       loss.backward()
       optimizer.step()
@@ -351,12 +357,16 @@ def main():
 
       if (total_step + 1) % 10 == 0:
         sbs = np.uint8(255 * np.concatenate([best_render, gt_frame]))
-        sbs = cv2.putText(sbs, f's{total_step + 1}', (10, sbs.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
+        sbs_array = np.asarray(sbs, dtype=np.uint8)
+        sbs = cv2.putText(sbs_array, f's{total_step + 1}', (10, sbs_array.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
         sbs = cv2.putText(sbs, f'{min_loss:.4f}', (sbs.shape[1] - 50, sbs.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
         side_by_side.append(sbs)
         comp = np.uint8(255 * np.abs(best_render - gt_frame))
-        comp = np.concatenate([comp, np.zeros([comp.shape[0], 250, 3], dtype=np.uint8)], axis=1)
-        comp = cv2.putText(comp, f's{total_step + 1}', (10, comp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
+        if len(comp.shape) >= 2:
+            comp = np.concatenate([comp, np.zeros([comp.shape[0], 250, 3], dtype=np.uint8)], axis=1)
+        comp_array = np.asarray(comp, dtype=np.uint8)
+        if len(comp_array.shape) >= 2:
+            comp = cv2.putText(comp_array, f's{total_step + 1}', (10, comp_array.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
         comp = cv2.putText(comp, f'loss: {loss:.4f}', (250, comp.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
         for i, (opt_var, opt_var_name) in enumerate(zip(best_opt_variables, opt_var_names)):
           comp = cv2.putText(comp, f'{opt_var_name}: {best_opt_variables[i][0]:.4f}', (135, 10 * (i + 1)), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1, cv2.LINE_AA)
@@ -374,7 +384,7 @@ def main():
   if test == 'sdf':
     img = cv2.imread('data/A.png', cv2.IMREAD_UNCHANGED) / 255.0
     img = np.pad(img, ((25, 25), (25, 25), (0, 0)))
-    img = cv2.resize(img, (200, 256))
+    img = cv2.resize(np.asarray(img, dtype=np.uint8), (200, 256))
     img_tensor = torch.tensor(img, dtype=torch.float64).permute(2, 0, 1).unsqueeze(0)
     gt_scales = [img_tensor.clone().to(device)]
     for i in range(3):
@@ -387,11 +397,13 @@ def main():
       torch.tensor([0.05], dtype=torch.float64), 
       torch.tensor([0.7], dtype=torch.float64), 
       torch.tensor([0.9], dtype=torch.float64), 
-      torch.tensor([0.2], dtype=torch.float64), 
+      torch.tensor([0.2], dtype=torch.float64),
+      torch.tensor([0.0], dtype=torch.float64),
+      torch.tensor([0.0], dtype=torch.float64),
       img_tensor.shape
     )
     bg_color = torch.tensor([0, 0, 0]).to(device)
-    origin = torch.stack([torch.mean(torch.stack(torch.where(elements[i, 3, :, :]>0)).float(), axis=1) for i in range(elements.shape[0])])
+    origin = torch.stack([torch.mean(torch.stack(torch.where(elements[i, 3, :, :]>0)).float(), dim=1) for i in range(elements.shape[0])])
     origin = torch.flip(origin, dims=[1])
     origin = origin.to(device)
     sc = torch.tensor([img_tensor.shape[3], img_tensor.shape[2]])[None, ...]
@@ -438,11 +450,17 @@ def main():
     min_sdf_loss = 1000.0
     rgb_losses = []
     sdf_losses = []
+    sdf_best_c_variables = c_variables_sdf.copy()
+    rgb_best_c_variables = c_variables_rgb.copy()
+    sdf_best_render = None
+    rgb_best_render = None
+    sdf_best_sdf = None
+    rgb_best_sdf = None
     for step in tqdm(range(n_steps)):
       rgb_optimizer.zero_grad()
       sdf_optimizer.zero_grad()
-      render_sdf, alpha_sdf = composite_layers(elements, c_variables_sdf, origin, elements.shape, bg_color, blur=False, device=device, debug=False)
-      render_rgb, alpha_rgb = composite_layers(elements, c_variables_rgb, origin, elements.shape, bg_color, blur=False, device=device, debug=False)
+      render_sdf, alpha_sdf = composite_layers(elements, c_variables_sdf, origin, {0: list(range(elements.shape[0]))}, elements.shape, bg_color, blur=False, device=device, debug=False)
+      render_rgb, alpha_rgb = composite_layers(elements, c_variables_rgb, origin, {0: list(range(elements.shape[0]))}, elements.shape, bg_color, blur=False, device=device, debug=False)
       elements_sdf = compute_sdf(alpha_sdf)
       sdf_loss = sdf_loss_fn(elements_sdf, shape_sdf)
       rgb_loss, rgb_scales_loss, alpha_loss, alpha_scales_loss, params_loss = loss_fn(
@@ -516,8 +534,8 @@ def main():
     x = 0.25
     y = 0.5
     for s in range(10):
-      frame = place_shape(shape, int(x * width), int(y * height), 1 + 0.05 * s, 1 - 0.05 * s, 2 * np.pi / 10 * s, width, height, keep_alpha=True)
-      cv2.imshow('frame', frame)
+      frame = place_shape([shape], [int(x * width)], [int(y * height)], [1 + 0.05 * s], [1 - 0.05 * s], [2 * np.pi / 10 * s], [0.0], [0.0], width, height, keep_alpha=True)
+      cv2.imshow('frame', np.asarray(frame, dtype=np.uint8))
       cv2.waitKey(0)
   
 if __name__ == '__main__':

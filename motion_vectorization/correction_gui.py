@@ -18,10 +18,11 @@ def display_frame():
         t_info = G_TIME_BANK['shapes'][G_CURR_FRAME_IDX]
         for label in t_info:
             if (label + 1) not in G_COLOR_MAP:
-                G_COLOR_MAP[label + 1] = G_RNG.integers(low=128, high=255, size=(3,))
+                G_COLOR_MAP[label + 1] = G_RNG.integers(low=128, high=255, size=(3,)).tolist()
             track_vis[t_info[label]['mask'][50:-50, 50:-50]>=0, :] = G_COLOR_MAP[label + 1]
         for label in t_info:
-            cx, cy = get_shape_centroid(np.uint8(t_info[label]['mask']>=0)[50:-50, 50:-50])
+            mask_array = np.array(t_info[label]['mask']>=0, dtype=np.uint8)[50:-50, 50:-50]
+            cx, cy = get_shape_centroid(mask_array)
             track_vis = cv2.circle(track_vis, (int(cx), int(cy)), 1, (255, 255, 255), 2)
             track_vis = cv2.putText(
                 track_vis, f'{str(label)}', (int(cx), int(cy)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1, cv2.LINE_AA)
@@ -30,11 +31,11 @@ def display_frame():
         track_vis = Img.fromarray(cv2.cvtColor(G_CURR_FRAME_RGB, cv2.COLOR_RGB2BGR))
     frame_height, frame_width = track_vis.size
     resize_ratio = min(1.0, G_MAX_FRAME_HEIGHT / frame_height)
-    track_vis = track_vis.resize((G_MAX_FRAME_HEIGHT, int(resize_ratio * frame_width)), Img.BICUBIC)
+    track_vis = track_vis.resize((G_MAX_FRAME_HEIGHT, int(resize_ratio * frame_width)), Img.Resampling.BICUBIC)
     G_CURR_FRAME_DISPLAY = ImageTk.PhotoImage(track_vis)
     Label(
         G_DISPLAY_WIN, 
-        image=G_CURR_FRAME_DISPLAY, 
+        image=G_CURR_FRAME_DISPLAY,  # type: ignore[arg-type]
         bg='grey'
     ).grid(row=0, column=0, padx=5, pady=5)
     G_FRAME_ENTRY.delete(0, END)

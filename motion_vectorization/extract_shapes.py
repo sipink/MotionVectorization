@@ -285,23 +285,38 @@ def main():
           os.path.join(video_dir, 'flow', 'backward')
       ]
       
-      # Get frame count from rgb directory
+      # Get frame count and dimensions from rgb directory
       rgb_files = sorted([f for f in os.listdir(os.path.join(video_dir, 'rgb')) if f.endswith('.png')])
+      
+      # Read first frame to get actual dimensions
+      if rgb_files:
+          first_frame_path = os.path.join(video_dir, 'rgb', rgb_files[0])
+          first_frame = cv2.imread(first_frame_path)
+          if first_frame is not None:
+              frame_height, frame_width = first_frame.shape[:2]
+              print(f"   Detected frame dimensions: {frame_height}×{frame_width}")
+          else:
+              # Fallback dimensions if frame loading fails
+              frame_height, frame_width = 512, 840
+              print(f"   Using fallback dimensions: {frame_height}×{frame_width}")
+      else:
+          frame_height, frame_width = 512, 840
+          print(f"   Using default dimensions: {frame_height}×{frame_width}")
       
       for placeholder_dir in placeholder_dirs:
           os.makedirs(placeholder_dir, exist_ok=True)
-          # Create minimal placeholder .npy files for each frame
+          # Create properly-sized placeholder .npy files for each frame
           for rgb_file in rgb_files:
               frame_num = rgb_file.split('.')[0]  # e.g. '001' from '001.png'
               placeholder_path = os.path.join(placeholder_dir, f"{frame_num}.npy")
               if not os.path.exists(placeholder_path):
-                  # Create minimal placeholder data
+                  # Create placeholder data with correct dimensions
                   if 'labels' in placeholder_dir or 'fgbg' in placeholder_dir or 'comps' in placeholder_dir:
-                      # Small segmentation-like array
-                      np.save(placeholder_path, np.zeros((64, 64), dtype=np.uint8))
+                      # Segmentation arrays matching frame dimensions
+                      np.save(placeholder_path, np.zeros((frame_height, frame_width), dtype=np.uint8))
                   else:  # flow directories
-                      # Small flow-like array
-                      np.save(placeholder_path, np.zeros((64, 64, 2), dtype=np.float32))
+                      # Flow arrays matching frame dimensions
+                      np.save(placeholder_path, np.zeros((frame_height, frame_width, 2), dtype=np.float32))
       
       print("✅ Created placeholder files for unified pipeline compatibility")
 

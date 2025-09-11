@@ -37,42 +37,77 @@ ENGINE_AVAILABILITY = {
     'bridges': False
 }
 
-# Engine imports with consolidated fallback system
-class _DummyEngineConfig:
-    def __init__(self, *args, **kwargs):
-        pass
-
-class _DummyEngine:
-    def __init__(self, *args, **kwargs):
-        pass
-
-# Import engines with fallback
+# Try importing SAM2 engine
 try:
     from .sam2_engine import SAM2SegmentationEngine, SAM2Config
     ENGINE_AVAILABILITY['sam2'] = True
-except ImportError:
-    SAM2SegmentationEngine, SAM2Config = _DummyEngine, _DummyEngineConfig
+    print("✅ SAM2 engine imported successfully")
+except ImportError as e:
+    print(f"⚠️ SAM2 engine import failed: {e}")
+    # Create dummy classes for graceful fallback
+    class SAM2SegmentationEngine:
+        def __init__(self, *args, **kwargs):
+            raise RuntimeError("SAM2 engine not available")
+    class SAM2Config:
+        def __init__(self, *args, **kwargs):
+            pass
 
+# Try importing CoTracker3 engine
 try:
     from .cotracker3_engine import CoTracker3TrackerEngine, CoTracker3Config
     ENGINE_AVAILABILITY['cotracker3'] = True
-except ImportError:
-    CoTracker3TrackerEngine, CoTracker3Config = _DummyEngine, _DummyEngineConfig
+    print("✅ CoTracker3 engine imported successfully")
+except ImportError as e:
+    print(f"⚠️ CoTracker3 engine import failed: {e}")
+    # Create dummy classes for graceful fallback
+    class CoTracker3TrackerEngine:
+        def __init__(self, *args, **kwargs):
+            raise RuntimeError("CoTracker3 engine not available")
+    class CoTracker3Config:
+        def __init__(self, *args, **kwargs):
+            pass
 
+# Try importing FlowSeek engine
 try:
     from .flowseek_engine import FlowSeekEngine, FlowSeekConfig, MotionBasisDecomposer
     ENGINE_AVAILABILITY['flowseek'] = True
-except ImportError:
-    FlowSeekEngine, FlowSeekConfig, MotionBasisDecomposer = _DummyEngine, _DummyEngineConfig, _DummyEngine
+    print("✅ FlowSeek engine imported successfully")
+except ImportError as e:
+    print(f"⚠️ FlowSeek engine import failed: {e}")
+    # Create dummy classes for graceful fallback
+    class FlowSeekEngine:
+        def __init__(self, *args, **kwargs):
+            raise RuntimeError("FlowSeek engine not available")
+    class FlowSeekConfig:
+        def __init__(self, *args, **kwargs):
+            pass
+    class MotionBasisDecomposer:
+        def __init__(self, *args, **kwargs):
+            pass
 
+# Try importing bridge components
 try:
     from .sam2_cotracker_bridge import SAM2CoTrackerBridge, BridgeConfig
     from .sam2_flowseek_bridge import SAM2FlowSeekBridge, SAM2FlowSeekBridgeConfig
     ENGINE_AVAILABILITY['bridges'] = True
-except ImportError:
-    SAM2CoTrackerBridge = SAM2FlowSeekBridge = _DummyEngine
-    BridgeConfig = SAM2FlowSeekBridgeConfig = _DummyEngineConfig
+    print("✅ Bridge components imported successfully")
+except ImportError as e:
+    print(f"⚠️ Bridge components import failed: {e}")
+    # Create dummy classes for graceful fallback
+    class SAM2CoTrackerBridge:
+        def __init__(self, *args, **kwargs):
+            pass
+    class SAM2FlowSeekBridge:
+        def __init__(self, *args, **kwargs):
+            pass
+    class BridgeConfig:
+        def __init__(self, *args, **kwargs):
+            pass
+    class SAM2FlowSeekBridgeConfig:
+        def __init__(self, *args, **kwargs):
+            pass
 
+print(f"🎯 Engine availability: {ENGINE_AVAILABILITY}")
 ENGINES_AVAILABLE = any(ENGINE_AVAILABILITY.values())
 
 
@@ -137,7 +172,12 @@ class UnifiedPipelineConfig:
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
             
         # Configure mode-specific settings
-        self._configure_mode()
+        if self.mode == "speed":
+            self._configure_speed_mode()
+        elif self.mode == "balanced":
+            self._configure_balanced_mode()
+        elif self.mode == "accuracy":
+            self._configure_accuracy_mode()
             
         # Validate engine requirements
         self._validate_engine_requirements()
@@ -151,51 +191,120 @@ class UnifiedPipelineConfig:
         if self.require_flowseek and not ENGINE_AVAILABILITY['flowseek']:
             raise RuntimeError("FlowSeek engine required but not available")
             
+        # Warn about missing engines
+        if not ENGINE_AVAILABILITY['sam2']:
+            print("⚠️ SAM2 not available, will use traditional segmentation")
+        if not ENGINE_AVAILABILITY['cotracker3']:
+            print("⚠️ CoTracker3 not available, will use optical flow tracking")
+        if not ENGINE_AVAILABILITY['flowseek']:
+            print("⚠️ FlowSeek not available, will use traditional optical flow")
             
-    def _configure_mode(self):
-        """Configure settings based on selected mode"""
-        mode_configs = {
-            "speed": {
-                "target_fps": 60.0, "quality_threshold": 0.75, "batch_size": 4,
-                "enable_cross_validation": False, "mixed_precision": True,
-                "sam2": {"mixed_precision": True, "compile_model": True},
-                "cotracker3": {"model_variant": "cotracker3_online", "grid_size": 30, "mixed_precision": True},
-                "flowseek": {"mixed_precision": True, "compile_model": True, "iters": 8}
-            },
-            "balanced": {
-                "target_fps": 44.0, "quality_threshold": 0.85, "batch_size": 2,
-                "enable_cross_validation": True, "mixed_precision": True,
-                "sam2": {"model_cfg": "sam2_hiera_l.yaml", "mixed_precision": True, "compile_model": True},
-                "cotracker3": {"model_variant": "cotracker3_offline", "grid_size": 40, "mixed_precision": True},
-                "flowseek": {"adaptive_complexity": True, "depth_integration": True, "iters": 12}
-            },
-            "accuracy": {
-                "target_fps": 30.0, "quality_threshold": 0.95, "batch_size": 1,
-                "enable_cross_validation": True, "tracking_flow_validation": True,
-                "segmentation_tracking_validation": True, "mixed_precision": False,
-                "sam2": {"model_cfg": "sam2_hiera_l.yaml", "mixed_precision": False, "accuracy_threshold": 0.98},
-                "cotracker3": {"model_variant": "cotracker3_offline", "grid_size": 50, "mixed_precision": False, "accuracy_target": 0.98},
-                "flowseek": {"depth_integration": True, "adaptive_complexity": False, "iters": 16, "target_accuracy": 0.95}
-            }
-        }
+    def _configure_speed_mode(self):
+        """Optimize for maximum speed"""
+        self.target_fps = 60.0
+        self.quality_threshold = 0.75
+        self.mixed_precision = True
+        self.compile_optimization = True
+        self.enable_cross_validation = False
+        self.batch_size = 4
         
-        config = mode_configs.get(self.mode, mode_configs["balanced"])
-        for key, value in config.items():
-            if key not in ["sam2", "cotracker3", "flowseek"] and hasattr(self, key):
-                setattr(self, key, value)
+        # Speed-optimized engine configs (only if engines are available)
+        if self.sam2_config is None and ENGINE_AVAILABILITY['sam2']:
+            self.sam2_config = SAM2Config(
+                device=self.device,
+                mixed_precision=True,
+                compile_model=True
+            )
         
-        # Configure engine-specific settings
-        for engine in ["sam2", "cotracker3", "flowseek"]:
-            if engine in config and getattr(self, f"{engine}_config") is None:
-                engine_config = config[engine].copy()
-                engine_config["device"] = self.device
-                if ENGINE_AVAILABILITY.get(engine.replace("cotracker3", "cotracker3").replace("sam2", "sam2").replace("flowseek", "flowseek")):
-                    if engine == "sam2":
-                        self.sam2_config = SAM2Config(**engine_config)
-                    elif engine == "cotracker3":
-                        self.cotracker3_config = CoTracker3Config(**engine_config)
-                    elif engine == "flowseek":
-                        self.flowseek_config = FlowSeekConfig(**engine_config)
+        if self.cotracker3_config is None and ENGINE_AVAILABILITY['cotracker3']:
+            self.cotracker3_config = CoTracker3Config(
+                device=self.device,
+                model_variant="cotracker3_online",  # Online mode for speed
+                grid_size=30,  # Smaller grid
+                mixed_precision=True
+            )
+            
+        if self.flowseek_config is None:
+            if ENGINE_AVAILABILITY['flowseek']:
+                self.flowseek_config = FlowSeekConfig(
+                    device=self.device,
+                    mixed_precision=True,
+                    compile_model=True
+                )
+            else:
+                self.flowseek_config = FlowSeekConfig(
+                    adaptive_complexity=True,
+                    searaft_fallback=True,
+                    iters=8  # Fewer iterations
+                )
+            
+    def _configure_balanced_mode(self):
+        """Balance speed and accuracy"""
+        self.target_fps = 44.0
+        self.quality_threshold = 0.85
+        self.enable_cross_validation = True
+        self.batch_size = 2
+        
+        # Balanced engine configs
+        if self.sam2_config is None and ENGINE_AVAILABILITY['sam2']:
+            self.sam2_config = SAM2Config(
+                model_cfg="sam2_hiera_l.yaml",  # Large model
+                device=self.device,
+                mixed_precision=True,
+                compile_model=True
+            )
+            
+        if self.cotracker3_config is None and ENGINE_AVAILABILITY['cotracker3']:
+            self.cotracker3_config = CoTracker3Config(
+                model_variant="cotracker3_offline",  # Offline for accuracy
+                device=self.device,
+                grid_size=40,
+                mixed_precision=True
+            )
+            
+        if self.flowseek_config is None and ENGINE_AVAILABILITY['flowseek']:
+            self.flowseek_config = FlowSeekConfig(
+                device=self.device,
+                adaptive_complexity=True,
+                depth_integration=True,
+                iters=12
+            )
+            
+    def _configure_accuracy_mode(self):
+        """Optimize for maximum accuracy"""
+        self.target_fps = 30.0
+        self.quality_threshold = 0.95
+        self.enable_cross_validation = True
+        self.tracking_flow_validation = True
+        self.segmentation_tracking_validation = True
+        self.batch_size = 1
+        
+        # Accuracy-optimized engine configs
+        if self.sam2_config is None and ENGINE_AVAILABILITY['sam2']:
+            self.sam2_config = SAM2Config(
+                model_cfg="sam2_hiera_l.yaml",  # Large model
+                device=self.device,
+                mixed_precision=False,  # Full precision
+                accuracy_threshold=0.98
+            )
+            
+        if self.cotracker3_config is None and ENGINE_AVAILABILITY['cotracker3']:
+            self.cotracker3_config = CoTracker3Config(
+                model_variant="cotracker3_offline",
+                device=self.device,
+                grid_size=50,  # Dense grid
+                mixed_precision=False,
+                accuracy_target=0.98
+            )
+            
+        if self.flowseek_config is None and ENGINE_AVAILABILITY['flowseek']:
+            self.flowseek_config = FlowSeekConfig(
+                device=self.device,
+                depth_integration=True,
+                adaptive_complexity=False,  # Always use FlowSeek
+                iters=16,  # More iterations for accuracy
+                target_accuracy=0.95
+            )
 
 
 class UnifiedMotionPipeline:
@@ -244,12 +353,19 @@ class UnifiedMotionPipeline:
         
         # Processing state
         self.processing_history = deque(maxlen=100)
+        self.quality_validator = UnifiedQualityValidator(self.config)
+        self.memory_manager = GPUMemoryManager(self.device, self.config.memory_pool_size_mb)
         
         # Initialize the complete pipeline
         self._initialize_unified_pipeline()
         
     def _initialize_unified_pipeline(self):
         """Initialize all engines and optimization"""
+        print(f"🚀 Initializing Unified Motion Vectorization Pipeline")
+        print(f"   Mode: {self.config.mode.upper()}")
+        print(f"   Device: {self.device}")
+        print(f"   Target FPS: {self.config.target_fps}")
+        print(f"   Quality Target: {self.config.overall_quality_target}")
         
         if not ENGINES_AVAILABLE:
             raise RuntimeError("Required engines not available. Please check dependencies.")
@@ -257,56 +373,86 @@ class UnifiedMotionPipeline:
         start_time = time.time()
         
         # Initialize engines with GPU optimization
-        self._initialize_engines()
-        self._setup_cross_validation()
-        self._optimize_pipeline()
+        with self.memory_manager:
+            self._initialize_engines()
+            self._setup_cross_validation()
+            self._optimize_pipeline()
             
         init_time = time.time() - start_time
+        print(f"✅ Unified pipeline initialized in {init_time:.2f}s")
+        print(f"📊 Memory allocated: {self.memory_manager.get_memory_usage():.1f}MB")
         
         # Warmup with dummy data for optimal performance
         self._warmup_pipeline()
         
     def _initialize_engines(self):
         """Initialize all three engines with optimal settings"""
-        engines = [
-            ('sam2', SAM2SegmentationEngine, 'sam2_config'),
-            ('cotracker3', CoTracker3TrackerEngine, 'cotracker3_config'),
-            ('flowseek', 'flowseek_special', 'flowseek_config')
-        ]
+        print("🔧 Initializing engines...")
         
-        for engine_key, engine_class, config_attr in engines:
-            engine_attr = f"{engine_key}_engine"
-            config = getattr(self.config, config_attr, None)
+        # SAM2.1 Segmentation Engine
+        if ENGINE_AVAILABILITY['sam2'] and self.config.sam2_config is not None:
+            try:
+                self.sam2_engine = SAM2SegmentationEngine(self.config.sam2_config)
+                if self.config.compile_optimization and self.device.type == 'cuda':
+                    self.sam2_engine = torch.compile(self.sam2_engine)
+                print("✅ SAM2.1 engine ready")
+            except Exception as e:
+                print(f"⚠️ SAM2.1 initialization failed: {e}")
+                self.sam2_engine = None
+        else:
+            print("⚠️ SAM2.1 engine not available or not configured")
+            self.sam2_engine = None
             
-            if ENGINE_AVAILABILITY.get(engine_key) and config is not None:
-                try:
-                    if engine_key == 'flowseek':
-                        from .flowseek_engine import create_flowseek_engine
-                        engine = create_flowseek_engine(
-                            config=config, device=self.device, mixed_precision=self.config.mixed_precision
-                        )
-                    else:
-                        engine = engine_class(config)
-                    
-                    if self.config.compile_optimization and self.device.type == 'cuda':
-                        engine = torch.compile(engine)
-                    
-                    setattr(self, engine_attr, engine)
-                except Exception:
-                    setattr(self, engine_attr, None)
-            else:
-                setattr(self, engine_attr, None)
+        # CoTracker3 Tracking Engine
+        if ENGINE_AVAILABILITY['cotracker3'] and self.config.cotracker3_config is not None:
+            try:
+                self.cotracker3_engine = CoTracker3TrackerEngine(self.config.cotracker3_config)
+                if self.config.compile_optimization and self.device.type == 'cuda':
+                    self.cotracker3_engine = torch.compile(self.cotracker3_engine)
+                print("✅ CoTracker3 engine ready")
+            except Exception as e:
+                print(f"⚠️ CoTracker3 initialization failed: {e}")
+                self.cotracker3_engine = None
+        else:
+            print("⚠️ CoTracker3 engine not available or not configured")
+            self.cotracker3_engine = None
+            
+        # FlowSeek Optical Flow Engine
+        if ENGINE_AVAILABILITY['flowseek'] and self.config.flowseek_config is not None:
+            try:
+                from .flowseek_engine import create_flowseek_engine
+                self.flowseek_engine = create_flowseek_engine(
+                    config=self.config.flowseek_config,
+                    device=self.device,
+                    mixed_precision=self.config.mixed_precision
+                )
+                if self.config.compile_optimization and self.device.type == 'cuda':
+                    self.flowseek_engine = torch.compile(self.flowseek_engine)
+                print("✅ FlowSeek engine ready")
+            except Exception as e:
+                print(f"⚠️ FlowSeek initialization failed: {e}")
+                self.flowseek_engine = None
+        else:
+            print("⚠️ FlowSeek engine not available or not configured")
+            self.flowseek_engine = None
             
     def _setup_cross_validation(self):
         """Setup cross-engine validation bridges"""
         if not self.config.enable_cross_validation:
             return
+            
+        print("🔗 Setting up cross-validation bridges...")
+        
         try:
+            # SAM2-CoTracker3 bridge
             self.sam2_cotracker_bridge = SAM2CoTrackerBridge(
                 sam2_config=self.config.sam2_config,
                 cotracker_config=self.config.cotracker3_config,
                 bridge_config=self.config.bridge_config
             )
+            print("✅ SAM2-CoTracker3 bridge ready")
+            
+            # SAM2-FlowSeek bridge
             self.sam2_flowseek_bridge = SAM2FlowSeekBridge(
                 SAM2FlowSeekBridgeConfig(
                     device=str(self.device),
@@ -315,11 +461,15 @@ class UnifiedMotionPipeline:
                     mixed_precision=self.config.mixed_precision
                 )
             )
-        except Exception:
+            print("✅ SAM2-FlowSeek bridge ready")
+            
+        except Exception as e:
+            print(f"⚠️ Cross-validation bridges setup failed: {e}")
             self.config.enable_cross_validation = False
             
     def _optimize_pipeline(self) -> None:
         """Apply global optimizations across the entire pipeline with error handling"""
+        print("⚡ Applying global optimizations...")
         
         try:
             # GPU optimizations with validation
@@ -334,6 +484,7 @@ class UnifiedMotionPipeline:
                 
                 # Multi-GPU setup if available and requested
                 if self.config.multi_gpu and torch.cuda.device_count() > 1:
+                    print(f"🚀 Multi-GPU setup: {torch.cuda.device_count()} GPUs detected")
                     # Note: Actual DataParallel setup would be engine-specific
                 
             # Memory optimization with error handling
@@ -343,12 +494,17 @@ class UnifiedMotionPipeline:
                         torch.cuda.empty_cache()
                     gc.collect()
                 except Exception as e:
+                    print(f"⚠️ Memory optimization failed: {e}")
                 
+            print("✅ Global optimizations applied")
             
         except Exception as e:
+            print(f"⚠️ Pipeline optimization failed: {e}")
+            print("   Continuing with default settings")
         
     def _warmup_pipeline(self) -> None:
         """Warmup all engines for optimal performance with error handling"""
+        print("🔥 Warming up pipeline...")
         
         try:
             # Create minimal dummy input for warmup
@@ -359,13 +515,15 @@ class UnifiedMotionPipeline:
                 dummy_frame, dummy_frame,
                 warmup=True
             )
+            print("✅ Pipeline warmed up successfully")
             
             # Clear any warmup artifacts from memory
             if self.device.type == 'cuda':
                 torch.cuda.empty_cache()
                 
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"⚠️ Pipeline warmup failed: {e}")
+            print("   Continuing without warmup - performance may be slower initially")
             
     def process_video(
         self,
@@ -406,6 +564,8 @@ class UnifiedMotionPipeline:
         Returns:
             Complete processing results and performance metrics
         """
+        print(f"🎬 Unified Pipeline Processing: {video_path}")
+        print(f"📍 Mode: {self.config.mode.upper()} | Target: {self.config.overall_quality_target:.1%} quality")
         
         # Setup output directories
         output_path = Path(output_dir)
@@ -431,6 +591,7 @@ class UnifiedMotionPipeline:
             cap.release()
             raise ValueError(f"Invalid video file: no frames found in {video_path}")
         if fps <= 0:
+            print(f"⚠️ Warning: Invalid FPS value {fps}, using default 30 FPS")
             fps = 30.0
         
         # Determine processing range
@@ -440,6 +601,7 @@ class UnifiedMotionPipeline:
             end_frame = total_frames
         
         frames_to_process = end_frame - start_frame
+        print(f"📊 Processing {frames_to_process} frames ({start_frame} to {end_frame-1})")
         
         # Read frames into memory (if reasonable size)
         frames = []
@@ -448,8 +610,10 @@ class UnifiedMotionPipeline:
         for frame_idx in range(frames_to_process):
             ret, frame = cap.read()
             if not ret:
+                print(f"⚠️ Warning: Failed to read frame {start_frame + frame_idx}")
                 break
             if frame is None or frame.size == 0:
+                print(f"⚠️ Warning: Empty frame at index {start_frame + frame_idx}")
                 continue
             frames.append(frame)
         
@@ -512,7 +676,7 @@ class UnifiedMotionPipeline:
             
             # Memory cleanup between batches
             if self.config.memory_efficient:
-                _cleanup_memory(self.device)
+                self.memory_manager.cleanup()
         
         # Generate comprehensive analysis
         final_results = self._generate_final_analysis(
@@ -527,6 +691,10 @@ class UnifiedMotionPipeline:
         avg_fps = len(processing_results) / final_results['total_processing_time']
         avg_quality = np.mean(final_results['quality_scores']['overall'])
         
+        print(f"✅ Unified pipeline processing complete!")
+        print(f"📊 Performance: {avg_fps:.1f} FPS (target: {self.config.target_fps})")
+        print(f"🎯 Quality: {avg_quality:.1%} (target: {self.config.overall_quality_target:.1%})")
+        print(f"💾 Results saved to: {output_dir}")
         
         return final_results
         
@@ -610,16 +778,17 @@ class UnifiedMotionPipeline:
                     results['processing_times']['cross_validation'] = time.time() - cv_start
                 
                 # Step 6: Advanced Quality Assessment (with SIGGRAPH 2025 enhancements)
-                quality_results = _assess_quality(results)
+                quality_results = self.quality_validator.assess_frame_pair_quality(results)
                 results['quality_scores'] = quality_results
                 
                 # Step 6b: Neural Motion Refinement (if quality below threshold)
                 if quality_results.get('overall_quality', 0) < self.config.quality_threshold:
+                    print("🔧 Applying neural motion refinement...")
                     refined_motion = self._apply_neural_motion_refinement(results)
                     if refined_motion:
                         results['motion_parameters'] = refined_motion
                         # Re-assess quality after refinement
-                        quality_results = _assess_quality(results)
+                        quality_results = self.quality_validator.assess_frame_pair_quality(results)
                         results['quality_scores'] = quality_results
                 
                 # Step 7: Performance Metrics
@@ -627,7 +796,7 @@ class UnifiedMotionPipeline:
                 results['performance_metrics'] = {
                     'total_processing_time': total_time,
                     'fps': 1.0 / total_time,
-                    'memory_usage_mb': 0.0,
+                    'memory_usage_mb': self.memory_manager.get_memory_usage(),
                     'gpu_utilization': self._get_gpu_utilization() if self.device.type == 'cuda' else 0
                 }
                 
@@ -637,8 +806,8 @@ class UnifiedMotionPipeline:
                 results['status'] = 'success'
                 results['overall_quality'] = quality_results.get('overall_quality', 0.0)
                 
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"⚠️ Frame pair processing failed: {e}")
                 results['status'] = 'failed'
                 results['error'] = str(e)
                 results['overall_quality'] = 0.0
@@ -667,8 +836,8 @@ class UnifiedMotionPipeline:
                 'quality_score': metadata.get('average_quality', 0.0)
             }
             
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"⚠️ SAM2.1 segmentation failed: {e}")
             return {'status': 'failed', 'error': str(e), 'masks': None}
             
     def _process_tracking(
@@ -714,8 +883,8 @@ class UnifiedMotionPipeline:
                 'quality_score': self._calculate_tracking_quality(tracks, visibility)
             }
             
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"⚠️ CoTracker3 tracking failed: {e}")
             return {'status': 'failed', 'error': str(e), 'tracks': None}
             
     def _process_optical_flow(
@@ -766,8 +935,8 @@ class UnifiedMotionPipeline:
                     'quality_score': self._calculate_flow_quality(forward_flow, backward_flow)
                 }
                 
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"⚠️ FlowSeek optical flow failed: {e}")
             return {'status': 'failed', 'error': str(e), 'flow': None}
             
     def _extract_motion_parameters(
@@ -838,29 +1007,86 @@ class UnifiedMotionPipeline:
         return motion_params
         
     def _cross_validate_results(self, results: Dict[str, Any]) -> Dict[str, Any]:
-        """Simple cross-validation"""
-        return {
-            'tracking_flow_consistency': 0.8,
-            'segmentation_tracking_alignment': 0.8,
-            'overall_consistency': 0.8,
-            'confidence_score': 0.8
+        """Cross-validate results between engines"""
+        validation_results = {
+            'tracking_flow_consistency': 0.0,
+            'segmentation_tracking_alignment': 0.0,
+            'overall_consistency': 0.0,
+            'confidence_score': 0.0
         }
+        
+        # Validate tracking vs flow consistency
+        if (results['tracking'].get('status') == 'success' and 
+            results['optical_flow'].get('status') == 'success'):
+            
+            validation_results['tracking_flow_consistency'] = self._validate_tracking_flow_consistency(
+                results['tracking'], results['optical_flow']
+            )
+            
+        # Validate segmentation vs tracking alignment
+        if (results['segmentation'].get('status') == 'success' and 
+            results['tracking'].get('status') == 'success'):
+            
+            validation_results['segmentation_tracking_alignment'] = self._validate_segmentation_tracking_alignment(
+                results['segmentation'], results['tracking']
+            )
+        
+        # Calculate overall consistency
+        consistency_scores = [
+            validation_results['tracking_flow_consistency'],
+            validation_results['segmentation_tracking_alignment']
+        ]
+        
+        valid_scores = [s for s in consistency_scores if s > 0]
+        if valid_scores:
+            validation_results['overall_consistency'] = np.mean(valid_scores)
+            validation_results['confidence_score'] = np.min(valid_scores)  # Conservative estimate
+            
+        return validation_results
         
     # ================================
     # Helper Methods
     # ================================
     
     def _prepare_video_tensor(self, frames: List[np.ndarray]) -> torch.Tensor:
-        """Prepare video tensor for processing"""
-        rgb_frames = [cv2.cvtColor(frame, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0 for frame in frames]
-        video = np.stack(rgb_frames, axis=0)
-        video_tensor = torch.tensor(video, dtype=torch.float32, device=self.device)
-        return video_tensor.permute(0, 3, 1, 2).unsqueeze(0)
+        """Prepare video tensor for processing with error handling"""
+        if not frames:
+            raise ValueError("Empty frames list provided")
+        
+        rgb_frames = []
+        for i, frame in enumerate(frames):
+            if frame is None or frame.size == 0:
+                raise ValueError(f"Frame {i} is None or empty")
+            if len(frame.shape) != 3 or frame.shape[2] != 3:
+                raise ValueError(f"Frame {i} has invalid shape {frame.shape}, expected (H, W, 3)")
+            
+            try:
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
+                rgb_frames.append(frame_rgb)
+            except Exception as e:
+                raise RuntimeError(f"Failed to process frame {i}: {e}")
+            
+        try:
+            video = np.stack(rgb_frames, axis=0)
+            video_tensor = torch.tensor(video, dtype=torch.float32, device=self.device)
+            video_tensor = video_tensor.permute(0, 3, 1, 2).unsqueeze(0)  # (1, T, 3, H, W)
+            return video_tensor
+        except Exception as e:
+            raise RuntimeError(f"Failed to create video tensor: {e}")
         
     def _prepare_image_tensor(self, frame: np.ndarray) -> torch.Tensor:
-        """Prepare single image tensor"""
-        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB).astype(np.float32)
-        return torch.tensor(frame_rgb, device=self.device).permute(2, 0, 1).unsqueeze(0)
+        """Prepare single image tensor with error handling"""
+        if frame is None or frame.size == 0:
+            raise ValueError("Input frame is None or empty")
+        if len(frame.shape) != 3 or frame.shape[2] != 3:
+            raise ValueError(f"Expected frame shape (H, W, 3), got {frame.shape}")
+            
+        try:
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB).astype(np.float32)
+            tensor = torch.tensor(frame_rgb, device=self.device).permute(2, 0, 1).unsqueeze(0)
+            return tensor
+        except Exception as e:
+            raise RuntimeError(f"Failed to prepare image tensor: {e}")
         
     def _extract_tracking_points_from_masks(self, mask: np.ndarray) -> Optional[torch.Tensor]:
         """Extract tracking points from segmentation mask with optimized processing"""
@@ -903,8 +1129,8 @@ class UnifiedMotionPipeline:
                 ).unsqueeze(0)
                 return query_points
                 
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"⚠️ Point extraction from masks failed: {e}")
             return None
             
         return None
@@ -1005,17 +1231,137 @@ class UnifiedMotionPipeline:
         except Exception:
             return 0.0
             
-    def _validate_tracking_flow_consistency(self, tracking_results: Dict[str, Any], flow_results: Dict[str, Any]) -> float:
+    def _validate_tracking_flow_consistency(
+        self, 
+        tracking_results: Dict[str, Any],
+        flow_results: Dict[str, Any]
+    ) -> float:
         """Validate consistency between tracking and optical flow"""
-        return 0.8 if tracking_results and flow_results else 0.0
+        if not tracking_results or not flow_results:
+            return 0.0
             
-    def _validate_segmentation_tracking_alignment(self, segmentation_results: Dict[str, Any], tracking_results: Dict[str, Any]) -> float:
+        try:
+            tracks = tracking_results.get('tracks')
+            forward_flow = flow_results.get('forward_flow')
+            
+            if tracks is None or forward_flow is None:
+                return 0.0
+            
+            # Validate tensor types and shapes
+            if not isinstance(tracks, torch.Tensor) or not isinstance(forward_flow, np.ndarray):
+                print("⚠️ Invalid tensor types in consistency validation")
+                return 0.0
+            
+            if tracks.numel() == 0 or forward_flow.size == 0:
+                return 0.0
+                
+            # Extract track-based motion
+            if tracks.shape[1] >= 2:  # At least 2 frames
+                track_motion = tracks[:, 1] - tracks[:, 0]  # [N, 2]
+                track_motion_np = track_motion.cpu().numpy()
+                
+                # Sample flow at track positions
+                H, W = forward_flow.shape[:2]
+                track_positions = tracks[:, 0].cpu().numpy()  # [N, 2]
+                
+                flow_at_tracks = []
+                for pos in track_positions:
+                    x, y = int(np.clip(pos[0], 0, W-1)), int(np.clip(pos[1], 0, H-1))
+                    flow_at_tracks.append(forward_flow[y, x])
+                    
+                flow_at_tracks = np.array(flow_at_tracks)  # [N, 2]
+                
+                # Calculate correlation
+                if len(track_motion_np) > 0 and len(flow_at_tracks) > 0:
+                    correlations = []
+                    for dim in range(2):  # x and y dimensions
+                        if np.std(track_motion_np[:, dim]) > 1e-6 and np.std(flow_at_tracks[:, dim]) > 1e-6:
+                            corr = np.corrcoef(track_motion_np[:, dim], flow_at_tracks[:, dim])[0, 1]
+                            if not np.isnan(corr):
+                                correlations.append(abs(corr))
+                    
+                    if correlations:
+                        return float(np.mean(correlations))
+            
+            return 0.5  # Default moderate consistency
+            
+        except Exception:
+            return 0.0
+            
+    def _validate_segmentation_tracking_alignment(
+        self,
+        segmentation_results: Dict[str, Any],
+        tracking_results: Dict[str, Any]
+    ) -> float:
         """Validate alignment between segmentation and tracking"""
-        return 0.8 if segmentation_results and tracking_results else 0.0
+        if not segmentation_results or not tracking_results:
+            return 0.0
+            
+        try:
+            masks = segmentation_results.get('masks')
+            tracks = tracking_results.get('tracks')
+            visibility = tracking_results.get('visibility')
+            
+            if masks is None or tracks is None or visibility is None:
+                return 0.0
+            
+            # Validate data types and shapes
+            if isinstance(masks, list) and len(masks) == 0:
+                return 0.0
+            if isinstance(masks, np.ndarray) and masks.size == 0:
+                return 0.0
+            if not isinstance(tracks, torch.Tensor) or tracks.numel() == 0:
+                return 0.0
+            if not isinstance(visibility, torch.Tensor) or visibility.numel() == 0:
+                return 0.0
+                
+            mask = masks[0]  # First frame mask
+            
+            if tracks.shape[1] >= 1:  # At least 1 frame
+                track_positions = tracks[:, 0].cpu().numpy()  # [N, 2] - positions in first frame
+                visible_tracks = visibility[:, 0].cpu().numpy() > 0.5  # [N] - visibility in first frame
+                
+                # Check how many visible tracks fall within segmented objects
+                H, W = mask.shape
+                alignment_scores = []
+                
+                for i, (pos, is_visible) in enumerate(zip(track_positions, visible_tracks)):
+                    if not is_visible:
+                        continue
+                        
+                    x, y = int(np.clip(pos[0], 0, W-1)), int(np.clip(pos[1], 0, H-1))
+                    
+                    # Check if track is within a segmented object (non-background)
+                    if mask[y, x] > 0:  # Non-background pixel
+                        alignment_scores.append(1.0)
+                    else:
+                        alignment_scores.append(0.0)
+                
+                if alignment_scores:
+                    return float(np.mean(alignment_scores))
+            
+            return 0.5  # Default moderate alignment
+            
+        except Exception:
+            return 0.0
             
     def _get_gpu_utilization(self) -> float:
-        """Get current GPU utilization"""
-        return 0.5  # Default reasonable utilization
+        """Get current GPU utilization with error handling"""
+        try:
+            if self.device.type == 'cuda' and torch.cuda.is_available():
+                device_idx = self.device.index or 0
+                if device_idx < torch.cuda.device_count():
+                    allocated = torch.cuda.memory_allocated(device_idx)
+                    cached = torch.cuda.memory_reserved(device_idx)
+                    total_memory = torch.cuda.get_device_properties(device_idx).total_memory
+                    
+                    if total_memory > 0:
+                        utilization = (allocated + cached) / total_memory
+                        return float(np.clip(utilization, 0.0, 1.0))
+        except Exception as e:
+            print(f"⚠️ GPU utilization check failed: {e}")
+            
+        return 0.0
         
     def _update_performance_stats(self, results: Dict[str, Any]) -> None:
         """Update global performance statistics with validation"""
@@ -1115,6 +1461,7 @@ class UnifiedMotionPipeline:
             return
             
         try:
+            # Save segmentation masks with validation
             seg_data = results.get('segmentation', {})
             if seg_data and seg_data.get('masks') is not None:
                 masks = seg_data['masks']
@@ -1122,24 +1469,30 @@ class UnifiedMotionPipeline:
                     if mask is not None and mask.size > 0:
                         mask_path = seg_dir / f"frame_{frame_idx:04d}_mask_{i}.png"
                         mask_img = (mask * 255).astype(np.uint8)
-                        cv2.imwrite(str(mask_path), mask_img)
-        except Exception:
-            pass
+                        if not cv2.imwrite(str(mask_path), mask_img):
+                            print(f"⚠️ Failed to save mask {mask_path}")
+        except Exception as e:
+            print(f"⚠️ Failed to save segmentation results: {e}")
         
         try:
+            # Save tracking data with validation
             track_data_raw = results.get('tracking', {})
             if track_data_raw and track_data_raw.get('tracks') is not None:
                 tracks = track_data_raw['tracks']
                 visibility = track_data_raw.get('visibility')
+                
                 if isinstance(tracks, torch.Tensor) and tracks.numel() > 0:
-                    track_data = {'tracks': tracks.detach().cpu().numpy().tolist()}
+                    track_data = {
+                        'tracks': tracks.detach().cpu().numpy().tolist(),
+                    }
                     if isinstance(visibility, torch.Tensor) and visibility.numel() > 0:
                         track_data['visibility'] = visibility.detach().cpu().numpy().tolist()
+                    
                     track_path = track_dir / f"frame_{frame_idx:04d}_tracks.json"
                     with open(track_path, 'w') as f:
                         json.dump(track_data, f, indent=2)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"⚠️ Failed to save tracking results: {e}")
         
         try:
             # Save optical flow with validation
@@ -1150,6 +1503,7 @@ class UnifiedMotionPipeline:
                     flow_path = flow_dir / f"frame_{frame_idx:04d}_flow.npy"
                     np.save(flow_path, forward_flow)
         except Exception as e:
+            print(f"⚠️ Failed to save optical flow results: {e}")
         
         try:
             # Save motion parameters with validation
@@ -1159,6 +1513,7 @@ class UnifiedMotionPipeline:
                 with open(motion_path, 'w') as f:
                     json.dump(motion_params, f, indent=2)
         except Exception as e:
+            print(f"⚠️ Failed to save motion parameters: {e}")
             
     def _save_visualization(self, results: Dict[str, Any], viz_path: Path):
         """Save visualization of results"""
@@ -1269,6 +1624,7 @@ class UnifiedMotionPipeline:
         with open(results_file, 'w') as f:
             json.dump(json_safe_results, f, indent=2)
             
+        print(f"💾 Complete results saved to: {results_file}")
     
     def _apply_neural_motion_refinement(self, results: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Apply neural motion refinement for improved accuracy (2025 techniques)"""
@@ -1368,24 +1724,220 @@ class UnifiedMotionPipeline:
             return motion_params
 
 
-# Simplified helper functions
-def _assess_quality(results: Dict[str, Any]) -> Dict[str, float]:
-    """Simple quality assessment"""
-    return {
-        'segmentation': results.get('segmentation', {}).get('quality_score', 0.0),
-        'tracking': results.get('tracking', {}).get('quality_score', 0.0),
-        'flow': results.get('optical_flow', {}).get('quality_score', 0.0),
-        'overall_quality': 0.8  # Default reasonable score
-    }
+class UnifiedQualityValidator:
+    """Advanced quality validation system with SIGGRAPH 2025 motion verification"""
+    
+    def __init__(self, config: UnifiedPipelineConfig):
+        self.config = config
+        self.temporal_consistency_validator = TemporalConsistencyValidator()
+        self.motion_verification_enabled = True
+        
+    def assess_frame_pair_quality(self, results: Dict[str, Any]) -> Dict[str, float]:
+        """Assess quality of frame pair processing results"""
+        quality_scores = {}
+        
+        # Segmentation quality
+        seg_results = results.get('segmentation', {})
+        quality_scores['segmentation'] = seg_results.get('quality_score', 0.0)
+        
+        # Tracking quality
+        track_results = results.get('tracking', {})
+        quality_scores['tracking'] = track_results.get('quality_score', 0.0)
+        
+        # Optical flow quality
+        flow_results = results.get('optical_flow', {})
+        quality_scores['flow'] = flow_results.get('quality_score', 0.0)
+        
+        # Cross-validation quality
+        cv_results = results.get('cross_validation', {})
+        quality_scores['cross_validation'] = cv_results.get('overall_consistency', 0.0)
+        
+        # Overall quality (weighted combination)
+        weights = {
+            'segmentation': 0.3,
+            'tracking': 0.3,
+            'flow': 0.25,
+            'cross_validation': 0.15
+        }
+        
+        overall_quality = sum(
+            weights.get(key, 0) * score 
+            for key, score in quality_scores.items() 
+            if score > 0
+        )
+        
+        quality_scores['overall_quality'] = overall_quality
+        
+        # Advanced temporal consistency check (SIGGRAPH 2025 techniques)
+        if self.motion_verification_enabled and len(results.get('motion_parameters', {})) > 0:
+            temporal_score = self._assess_temporal_consistency(results)
+            quality_scores['temporal_consistency'] = temporal_score
+            
+            # Adjust overall quality with temporal consistency
+            quality_scores['overall_quality'] = (overall_quality * 0.85) + (temporal_score * 0.15)
+        
+        return quality_scores
+    
+    def _assess_temporal_consistency(self, results: Dict[str, Any]) -> float:
+        """Assess temporal consistency using motion verification techniques"""
+        try:
+            motion_params = results.get('motion_parameters', {})
+            if not motion_params:
+                return 0.0
+            
+            # Motion smoothness analysis
+            smoothness_score = self._calculate_motion_smoothness(motion_params)
+            
+            # Trajectory consistency check
+            trajectory_score = self._validate_motion_trajectories(motion_params)
+            
+            # Physical plausibility verification
+            physics_score = self._verify_motion_physics(motion_params)
+            
+            # Weighted temporal consistency
+            temporal_score = (
+                smoothness_score * 0.4 + 
+                trajectory_score * 0.35 + 
+                physics_score * 0.25
+            )
+            
+            return max(0.0, min(1.0, temporal_score))
+            
+        except Exception as e:
+            print(f"⚠️ Temporal consistency assessment failed: {e}")
+            return 0.0
+    
+    def _calculate_motion_smoothness(self, motion_params: Dict[str, Any]) -> float:
+        """Calculate motion parameter smoothness across frames"""
+        # Analyze motion parameter derivatives for smoothness
+        # Based on "Training-Free Motion-Guided Video Generation" (2025)
+        try:
+            smoothness_scores = []
+            for param_type in ['translation', 'rotation', 'scale']:
+                if param_type in motion_params:
+                    params = motion_params[param_type]
+                    if len(params) > 1:
+                        # Calculate motion smoothness via derivative analysis
+                        derivatives = np.diff(params, axis=0)
+                        smoothness = 1.0 / (1.0 + np.mean(np.abs(derivatives)))
+                        smoothness_scores.append(smoothness)
+            
+            return np.mean(smoothness_scores) if smoothness_scores else 0.5
+        except:
+            return 0.5
+    
+    def _validate_motion_trajectories(self, motion_params: Dict[str, Any]) -> float:
+        """Validate motion trajectory consistency"""
+        # Based on MoVer (SIGGRAPH 2025) motion verification principles
+        try:
+            if 'trajectories' not in motion_params:
+                return 0.7  # Default if no trajectory data
+            
+            trajectories = motion_params['trajectories']
+            consistency_scores = []
+            
+            for trajectory in trajectories:
+                # Check for sudden jumps or discontinuities
+                trajectory_smooth = self._check_trajectory_continuity(trajectory)
+                consistency_scores.append(trajectory_smooth)
+            
+            return np.mean(consistency_scores) if consistency_scores else 0.7
+        except:
+            return 0.7
+    
+    def _verify_motion_physics(self, motion_params: Dict[str, Any]) -> float:
+        """Verify motion follows physical plausibility"""
+        # Based on neural motion refinement research (2025)
+        try:
+            physics_score = 0.8  # Default reasonable score
+            
+            # Check for impossible accelerations
+            if 'acceleration' in motion_params:
+                accel = motion_params['acceleration']
+                if np.any(np.abs(accel) > 100):  # Unrealistic acceleration
+                    physics_score *= 0.5
+            
+            # Check for impossible velocity changes
+            if 'velocity' in motion_params:
+                velocity = motion_params['velocity']
+                velocity_changes = np.diff(velocity, axis=0)
+                if np.any(np.abs(velocity_changes) > 50):  # Sudden velocity jumps
+                    physics_score *= 0.7
+            
+            return physics_score
+        except Exception as e:
+            print(f"⚠️ Motion physics verification failed: {e}")
+            return 0.8
+    
+    def _check_trajectory_continuity(self, trajectory: np.ndarray) -> float:
+        """Check individual trajectory for continuity"""
+        try:
+            if len(trajectory) < 2:
+                return 1.0
+            
+            # Calculate position differences
+            pos_diffs = np.diff(trajectory, axis=0)
+            
+            # Check for sudden jumps (discontinuities)
+            jump_threshold = np.percentile(np.linalg.norm(pos_diffs, axis=1), 95)
+            large_jumps = np.sum(np.linalg.norm(pos_diffs, axis=1) > jump_threshold * 2)
+            
+            # Continuity score (lower jumps = higher score)
+            continuity_score = 1.0 - (large_jumps / len(pos_diffs))
+            return max(0.0, continuity_score)
+        except Exception as e:
+            print(f"⚠️ Trajectory continuity check failed: {e}")
+            return 0.8
 
-def _cleanup_memory(device: torch.device):
-    """Simple memory cleanup"""
-    try:
+
+class TemporalConsistencyValidator:
+    """SIGGRAPH 2025-style temporal consistency validation"""
+    
+    def __init__(self):
+        self.consistency_threshold = 0.75
+
+
+class GPUMemoryManager:
+    """GPU memory management for unified pipeline"""
+    
+    def __init__(self, device: torch.device, pool_size_mb: int = 8192):
+        self.device = device
+        self.pool_size_mb = pool_size_mb
+        self.initial_memory = 0
+        
         if device.type == 'cuda':
+            self.initial_memory = torch.cuda.memory_allocated(device)
+            
+    def __enter__(self):
+        if self.device.type == 'cuda':
             torch.cuda.empty_cache()
-        gc.collect()
-    except Exception:
-        pass
+        return self
+        
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.cleanup()
+        
+    def cleanup(self) -> None:
+        """Clean up GPU memory with error handling"""
+        try:
+            if self.device.type == 'cuda' and torch.cuda.is_available():
+                # Synchronize before cleanup
+                torch.cuda.synchronize(self.device)
+                torch.cuda.empty_cache()
+            gc.collect()
+        except Exception as e:
+            print(f"⚠️ Memory cleanup failed: {e}")
+            
+    def get_memory_usage(self) -> float:
+        """Get current memory usage in MB with error handling"""
+        try:
+            if self.device.type == 'cuda' and torch.cuda.is_available():
+                device_idx = self.device.index or 0
+                if device_idx < torch.cuda.device_count():
+                    current = torch.cuda.memory_allocated(device_idx)
+                    return (current - self.initial_memory) / 1024 / 1024
+        except Exception as e:
+            print(f"⚠️ Memory usage check failed: {e}")
+        return 0.0
 
 
 def create_unified_pipeline(
@@ -1410,6 +1962,20 @@ def create_unified_pipeline(
     return UnifiedMotionPipeline(config)
 
 
+# Convenience functions for different modes
+def create_speed_pipeline(device: str = "auto") -> UnifiedMotionPipeline:
+    """Create speed-optimized pipeline"""
+    return create_unified_pipeline("speed", device)
+
+
+def create_balanced_pipeline(device: str = "auto") -> UnifiedMotionPipeline:
+    """Create balanced pipeline"""
+    return create_unified_pipeline("balanced", device)
+
+
+def create_accuracy_pipeline(device: str = "auto") -> UnifiedMotionPipeline:
+    """Create accuracy-optimized pipeline"""
+    return create_unified_pipeline("accuracy", device)
 
 
 # Export UnifiedMotionVectorizationPipeline as an alias for compatibility

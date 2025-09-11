@@ -22,7 +22,7 @@ def group_shapes(motion_file, resize_file, d, gs):
     """Stub function - resize functionality not fully implemented"""
     return [], []
 
-def resize_aspect_raio(motion_file, resize_file, d, svg_groups, group_nums, size):
+def resize_aspect_ratio(motion_file, resize_file, d, svg_groups, group_nums, size):
     """Stub function - resize functionality not fully implemented"""
     pass
 
@@ -272,7 +272,7 @@ def main():
             open(os.path.join(arg.video_dir, 'resize.json'), 'rb'))
         
         svg_groups, group_nums = group_shapes(motion_file, resize_file, d, gs)
-        resize_aspect_raio(motion_file, resize_file, d, svg_groups, group_nums, [684, 512])
+        resize_aspect_ratio(motion_file, resize_file, d, svg_groups, group_nums, [684, 512])
     else:
         for g in gs:
             d.append(g)

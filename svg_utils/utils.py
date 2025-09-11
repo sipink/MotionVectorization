@@ -86,20 +86,6 @@ def extract_beat_times(audio_file_path, dur):
     y_harmonic, y_percussive = librosa.effects.hpss(y)
     tempo, beat_frames = librosa.beat.beat_track(y=y_percussive, sr=sr)
     beat_times = librosa.frames_to_time(beat_frames, sr=sr)
-    
-    # y, sr = librosa.load(audio_file_path, duration=dur)
-    
-    # onset_env = librosa.onset.onset_strength(y=y, sr=sr)
-    # tempo, beats = librosa.beat.beat_track(onset_envelope=onset_env)
-    # pulse = librosa.beat.plp(onset_envelope=onset_env, sr=sr)
-    # beats_plp = np.flatnonzero(librosa.util.localmax(pulse))
-    # times = librosa.times_like(pulse, sr=sr)
-    
-    # beat_times = times[beats_plp]
-    # beat_frames = librosa.time_to_frames(beat_times)
-    
-    # y_beats = librosa.clicks(frames=beat_frames, sr=sr, length=len(y))
-    # sf.write('../outputs/music/levitating_instrumental_clicks_only.wav', y_beats, sr)
     return beat_times
 
 

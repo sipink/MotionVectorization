@@ -139,32 +139,26 @@ def run_preprocessing(args, env):
     try:
         from motion_vectorization.preprocess import main as preprocess_main
         
-        # Override sys.argv for preprocessing
-        original_argv = sys.argv.copy()
-        preprocess_argv = [
-            'preprocess.py',
+        # Create argument list for preprocessing (no longer need to manipulate sys.argv)
+        preprocess_args = [
             '--video_file', args.video_file,
             '--video_dir', env['video_dir'],
             '--max_frames', str(args.max_frames) if args.max_frames > 0 else '-1',
             '--device', env['device'],
             '--use_ai_engines',
             '--generate_labels',
-            '--generate_flow'
+            '--generate_flow',
+            '--thresh', '1e-4',
+            '--min_dim', '1024'
         ]
-        
-        # Add threshold and min_dim arguments that preprocess expects
-        preprocess_argv.extend(['--thresh', '1e-4'])
-        preprocess_argv.extend(['--min_dim', '1024'])
-        
-        sys.argv = preprocess_argv
         
         print("🧠 Running AI-powered preprocessing...")
         start_time = time.time()
-        preprocess_main()
-        preprocessing_time = time.time() - start_time
         
-        # Restore original argv
-        sys.argv = original_argv
+        # Call preprocess main with our custom arguments
+        preprocess_main(preprocess_args)
+        
+        preprocessing_time = time.time() - start_time
         
         print(f"✅ Preprocessing completed in {preprocessing_time:.1f}s")
         return True

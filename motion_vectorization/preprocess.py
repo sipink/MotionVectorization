@@ -6,72 +6,76 @@ import numpy as np
 import argparse
 import torch
 from pathlib import Path
-
-parser = argparse.ArgumentParser()
-# Video and directory information.
-parser.add_argument(
-  '--video_file', type=str, required=True, 
-  help='Name of the video to process.')
-parser.add_argument(
-  '--video_dir', default='videos', 
-  help='Directory containing videos.')
-parser.add_argument(
-  '--thresh', default=1e-4, type=float, 
-  help='RGB difference threshold.')
-parser.add_argument(
-  '--min_dim', default=1024, type=int, 
-  help='Minimum frame dimension.')
-parser.add_argument(
-  '--max_frames', default=-1, type=int, 
-  help='Maximum number of frames to process.')
-
-# Add AI engine processing arguments
-parser.add_argument(
-  '--use_ai_engines', action='store_true', default=True,
-  help='Use SAM2, CoTracker3, and FlowSeek for preprocessing')
-parser.add_argument(
-  '--generate_labels', action='store_true', default=True,
-  help='Generate segmentation labels using SAM2')
-parser.add_argument(
-  '--generate_flow', action='store_true', default=True,
-  help='Generate optical flow using FlowSeek')
-parser.add_argument(
-  '--device', type=str, default='auto',
-  help='Device for AI processing (auto, cuda, cpu)')
-
-arg = parser.parse_args()
+from typing import Optional, List
 
 np.random.seed(0)
 
-def extract_frames_only():
+def create_argument_parser():
+  """Create and return the argument parser for preprocess module"""
+  parser = argparse.ArgumentParser()
+  # Video and directory information.
+  parser.add_argument(
+    '--video_file', type=str, required=True, 
+    help='Name of the video to process.')
+  parser.add_argument(
+    '--video_dir', default='videos', 
+    help='Directory containing videos.')
+  parser.add_argument(
+    '--thresh', default=1e-4, type=float, 
+    help='RGB difference threshold.')
+  parser.add_argument(
+    '--min_dim', default=1024, type=int, 
+    help='Minimum frame dimension.')
+  parser.add_argument(
+    '--max_frames', default=-1, type=int, 
+    help='Maximum number of frames to process.')
+
+  # Add AI engine processing arguments
+  parser.add_argument(
+    '--use_ai_engines', action='store_true', default=True,
+    help='Use SAM2, CoTracker3, and FlowSeek for preprocessing')
+  parser.add_argument(
+    '--generate_labels', action='store_true', default=True,
+    help='Generate segmentation labels using SAM2')
+  parser.add_argument(
+    '--generate_flow', action='store_true', default=True,
+    help='Generate optical flow using FlowSeek')
+  parser.add_argument(
+    '--device', type=str, default='auto',
+    help='Device for AI processing (auto, cuda, cpu)')
+  
+  return parser
+
+def extract_frames_only(args):
   """Extract frames without AI processing"""
-  video_name = os.path.splitext(arg.video_file.split('/')[-1])[0]
-  video_folder = os.path.join(arg.video_dir, video_name)
+  video_name = os.path.splitext(args.video_file.split('/')[-1])[0]
+  video_folder = os.path.join(args.video_dir, video_name)
   rgb_folder = os.path.join(video_folder, 'rgb')
   if not os.path.exists(rgb_folder):
     os.makedirs(rgb_folder)
-  cap = cv2.VideoCapture(os.path.join(arg.video_dir, arg.video_file))
+  cap = cv2.VideoCapture(os.path.join(args.video_dir, args.video_file))
   prev_frame = None
 
   frame_idx = 0
   frames_saved = []
+  min_dim = args.min_dim  # Use local copy to avoid modifying args
   while True:
-    if arg.max_frames >= 0:
-      if frame_idx >= arg.max_frames:
+    if args.max_frames >= 0:
+      if frame_idx >= args.max_frames:
         break
     
     _, frame = cap.read()
     if frame is None:
       break
     frame_height, frame_width, _ = frame.shape
-    if arg.min_dim < 0:
-      arg.min_dim = max(frame_height, frame_width)
-    if frame_height > arg.min_dim or frame_width > arg.min_dim:
-      resize_ratio = min(arg.min_dim / frame_height, arg.min_dim / frame_width)
+    if min_dim < 0:
+      min_dim = max(frame_height, frame_width)
+    if frame_height > min_dim or frame_width > min_dim:
+      resize_ratio = min(min_dim / frame_height, min_dim / frame_width)
       frame = cv2.resize(frame, (int(resize_ratio * frame_width), int(resize_ratio * frame_height)))
     save = True
     if frame_idx > 0 and prev_frame is not None:
-      if np.mean(np.abs(frame / 255.0 - prev_frame / 255.0)) < arg.thresh:
+      if np.mean(np.abs(frame / 255.0 - prev_frame / 255.0)) < args.thresh:
         save = False
     if save:
       frame_path = os.path.join(rgb_folder, f'{frame_idx + 1:03d}.png')
@@ -83,7 +87,7 @@ def extract_frames_only():
   cap.release()
   return video_name, video_folder, frames_saved
 
-def process_with_ai_engines(video_name, video_folder, frames_saved):
+def process_with_ai_engines(args, video_name, video_folder, frames_saved):
   """Process frames with SAM2, CoTracker3, and FlowSeek"""
   print("\n🚀 Processing with AI engines...")
   
@@ -97,15 +101,15 @@ def process_with_ai_engines(video_name, video_folder, frames_saved):
   
   # Configure processor
   config = VideoProcessorConfig(
-    video_file=arg.video_file,
-    video_dir=arg.video_dir,
+    video_file=args.video_file,
+    video_dir=args.video_dir,
     output_dir='motion_vectorization/outputs',
     suffix=None,
-    max_frames=arg.max_frames if arg.max_frames > 0 else 200,
-    device=arg.device if arg.device != 'auto' else ('cuda' if torch.cuda.is_available() else 'cpu'),
-    use_sam2=arg.generate_labels,
+    max_frames=args.max_frames if args.max_frames > 0 else 200,
+    device=args.device if args.device != 'auto' else ('cuda' if torch.cuda.is_available() else 'cpu'),
+    use_sam2=args.generate_labels,
     use_cotracker3=True,
-    use_flowseek=arg.generate_flow
+    use_flowseek=args.generate_flow
   )
   
   # Create processor and run
@@ -140,28 +144,38 @@ def process_with_ai_engines(video_name, video_folder, frames_saved):
   
   return results
 
-def main():
+def main(args: Optional[List[str]] = None):
   """Main preprocessing pipeline with AI engines"""
+  # Parse arguments if not provided
+  if args is None:
+    # We're being called from command line, parse sys.argv
+    parser = create_argument_parser()
+    parsed_args = parser.parse_args()
+  else:
+    # We're being called programmatically with custom args
+    parser = create_argument_parser()
+    parsed_args = parser.parse_args(args)
+  
   print(f"\n{'='*80}")
   print(f"🎬 MOTION VECTORIZATION PREPROCESSING")
   print(f"{'='*80}")
-  print(f"📹 Video: {arg.video_file}")
-  print(f"🤖 AI Engines: {'ENABLED' if arg.use_ai_engines else 'DISABLED'}")
+  print(f"📹 Video: {parsed_args.video_file}")
+  print(f"🤖 AI Engines: {'ENABLED' if parsed_args.use_ai_engines else 'DISABLED'}")
   
   # Step 1: Extract frames
   print("\n📸 Step 1: Extracting frames...")
-  video_name, video_folder, frames_saved = extract_frames_only()
+  video_name, video_folder, frames_saved = extract_frames_only(parsed_args)
   print(f"✅ Extracted {len(frames_saved)} frames to {video_folder}/rgb/")
   
   # Step 2: Process with AI engines if enabled
-  if arg.use_ai_engines and len(frames_saved) > 0:
+  if parsed_args.use_ai_engines and len(frames_saved) > 0:
     print("\n🧠 Step 2: Processing with AI engines...")
-    print(f"   - SAM2 Segmentation: {'ENABLED' if arg.generate_labels else 'DISABLED'}")
-    print(f"   - FlowSeek Optical Flow: {'ENABLED' if arg.generate_flow else 'DISABLED'}")
+    print(f"   - SAM2 Segmentation: {'ENABLED' if parsed_args.generate_labels else 'DISABLED'}")
+    print(f"   - FlowSeek Optical Flow: {'ENABLED' if parsed_args.generate_flow else 'DISABLED'}")
     print(f"   - CoTracker3 Tracking: ENABLED")
-    print(f"   - Device: {arg.device}")
+    print(f"   - Device: {parsed_args.device}")
     
-    results = process_with_ai_engines(video_name, video_folder, frames_saved)
+    results = process_with_ai_engines(parsed_args, video_name, video_folder, frames_saved)
   else:
     print("\n⚠️ Skipping AI processing (disabled or no frames)")
     results = None

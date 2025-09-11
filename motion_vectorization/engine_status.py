@@ -10,9 +10,9 @@ from datetime import datetime
 from typing import Dict, List, Tuple, Optional
 
 # Try to import PyTorch with robust error handling
-torch = None  # Initialize torch as None first
 TORCH_AVAILABLE = False
 PYTORCH_VERSION = "Not installed"
+torch = None
 
 try:
     import torch
@@ -21,6 +21,7 @@ try:
 except Exception as e:
     TORCH_AVAILABLE = False
     PYTORCH_VERSION = "Not installed"
+    torch = None
 
 # ANSI color codes for terminal output
 class Colors:
@@ -57,7 +58,14 @@ def check_engine_availability() -> Dict[str, Dict]:
                 status['gpu']['available'] = True
                 status['gpu']['device'] = torch.cuda.get_device_name(0)
                 status['gpu']['memory'] = f"{torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB"
-                status['gpu']['cuda_version'] = torch.version.cuda
+                try:
+                    # Use getattr with safe fallback for CUDA version
+                    if hasattr(torch, 'version'):
+                        status['gpu']['cuda_version'] = getattr(torch.version, 'cuda', 'Unknown')  # type: ignore
+                    else:
+                        status['gpu']['cuda_version'] = 'Unknown'
+                except (AttributeError, ImportError):
+                    status['gpu']['cuda_version'] = 'Unknown'
                 status['gpu']['details'] = [f'✅ GPU detected: {status["gpu"]["device"]} with {status["gpu"]["memory"]} memory']
             else:
                 status['gpu']['details'] = ['❌ No CUDA-capable GPU detected']
@@ -70,11 +78,15 @@ def check_engine_availability() -> Dict[str, Dict]:
     try:
         # Try importing SAM2 components
         try:
-            from sam2.build_sam import build_sam2_video_predictor
+            # Suppress import warnings for optional dependency
+            import warnings
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                from sam2.build_sam import build_sam2_video_predictor  # type: ignore
             status['sam2']['available'] = True
             status['sam2']['details'].append('✅ SAM2 video predictor available')
             status['sam2']['version'] = 'SAM2.1'
-        except ImportError:
+        except (ImportError, ModuleNotFoundError):
             status['sam2']['details'].append('❌ SAM2 video predictor not found')
             
         # Check for SAM2 models
@@ -97,23 +109,21 @@ def check_engine_availability() -> Dict[str, Dict]:
         # CoTracker3 should be available via torch.hub
         if TORCH_AVAILABLE and torch is not None:
             try:
-                # Import torch.hub only if torch is available
+                # torch.hub is always available if torch is available
                 if hasattr(torch, 'hub'):
-                    import torch.hub
                     status['cotracker3']['available'] = True
                     status['cotracker3']['details'].append('✅ torch.hub available for CoTracker3')
                     status['cotracker3']['version'] = 'CoTracker3 (Oct 2024)'
-                else:
-                    status['cotracker3']['details'].append('❌ torch.hub not available')
-                
+                    
                     # Check if model can be loaded
                     try:
                         # Try listing available models
-                        if torch is not None and hasattr(torch, 'hub'):
-                            torch.hub.list('facebookresearch/co-tracker', force_reload=False)
-                            status['cotracker3']['details'].append('✅ CoTracker3 models accessible')
+                        torch.hub.list('facebookresearch/co-tracker', force_reload=False)
+                        status['cotracker3']['details'].append('✅ CoTracker3 models accessible')
                     except Exception as hub_e:
                         status['cotracker3']['details'].append(f'⚠️ CoTracker3 hub access: {hub_e}')
+                else:
+                    status['cotracker3']['details'].append('❌ torch.hub not available')
             except Exception as e:
                 status['cotracker3']['details'].append(f'❌ CoTracker3 import error: {e}')
         else:
@@ -136,11 +146,10 @@ def check_engine_availability() -> Dict[str, Dict]:
         if TORCH_AVAILABLE and torch is not None:
             try:
                 if hasattr(torch, 'hub'):
-                    import torch.hub
                     # MiDaS depth models as fallback
                     status['flowseek']['details'].append('✅ MiDaS depth models available via torch.hub')
                     depth_available = True
-            except:
+            except Exception:
                 pass
             
         if depth_available:

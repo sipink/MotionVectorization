@@ -8,7 +8,7 @@ import networkx as nx
 import matplotlib.pyplot as plt
 import time
 import logging
-from typing import Dict, List, Tuple, Optional, Union, Any
+from typing import Dict, List, Tuple, Optional, Union, Any, NoReturn
 import warnings
 
 from .utils import warp_flo
@@ -28,11 +28,11 @@ except ImportError:
     CoTracker3Config = None
     SAM2CoTrackerBridge = None
     
-    def create_cotracker3_engine(mode="offline", device="auto", grid_size=50, **kwargs):
+    def create_cotracker3_engine(mode="offline", device="auto", grid_size=50, **kwargs) -> Any:
         """Fallback function that raises ImportError"""
         raise ImportError("CoTracker3 engine not available")
     
-    def create_sam2_cotracker_bridge(sam2_accuracy="high", cotracker_mode="offline", contour_density=30, device="auto", **kwargs):
+    def create_sam2_cotracker_bridge(sam2_accuracy="high", cotracker_mode="offline", contour_density=30, device="auto", **kwargs) -> Any:
         """Fallback function that raises ImportError"""
         raise ImportError("SAM2-CoTracker3 bridge not available")
     
@@ -623,9 +623,14 @@ class Processor:
                     tracks, visibility = self.cotracker3_engine.track_video_grid(
                         video_tensor, custom_points=prev_points
                     )
-                except AttributeError:
-                    # Fallback if method doesn't exist
-                    tracks, visibility = [], []
+                    if tracks is None:
+                        tracks = torch.empty((0, 0, 2))
+                    if visibility is None:
+                        visibility = torch.empty((0, 0))
+                except (AttributeError, TypeError):
+                    # Fallback if method doesn't exist - convert to tensors for consistency
+                    tracks = torch.empty((0, 0, 2))
+                    visibility = torch.empty((0, 0))
                 
                 # Extract motion parameters
                 motion_params = self.cotracker3_engine.extract_motion_parameters(
@@ -665,7 +670,7 @@ class Processor:
                     dist = np.linalg.norm(
                         np.array(prev_centroids[i]) - np.array(curr_centroids[j])
                     )
-                    shape_similarities[i, j] = max(0.0, 1.0 - dist / 100.0)  # Normalize distance
+                    shape_similarities[i, j] = max(0.0, 1.0 - float(dist) / 100.0)  # Normalize distance
                     motion_scores[i, j] = shape_similarities[i, j]
         
         print(f"✅ CoTracker3 correspondence complete: {len(prev_shapes)}→{len(curr_shapes)} shapes")

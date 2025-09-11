@@ -15,39 +15,44 @@ import torch
 import torch.nn.functional as F
 import numpy as np
 import cv2
-from typing import Dict, List, Tuple, Optional, Union, Any
+from typing import Dict, List, Tuple, Optional, Union, Any, TYPE_CHECKING
 import warnings
 from dataclasses import dataclass, field
 import time
 import json
 from pathlib import Path
 
-try:
-    from .flowseek_engine import FlowSeekEngine, create_flowseek_engine
-    from .flowseek_engine import FlowSeekConfig as FlowSeekEngineConfig
-    from .sam2_engine import SAM2SegmentationEngine
-    from .sam2_engine import SAM2Config as SAM2EngineConfig
+# Use TYPE_CHECKING pattern to avoid type conflicts
+if TYPE_CHECKING:
+    from .flowseek_engine import FlowSeekEngine, FlowSeekConfig
+    from .sam2_engine import SAM2SegmentationEngine, SAM2Config
     from .cotracker3_engine import CoTracker3TrackerEngine, CoTracker3Config
+else:
+    FlowSeekEngine = Any
+    FlowSeekConfig = Any
+    SAM2SegmentationEngine = Any 
+    SAM2Config = Any
+    CoTracker3TrackerEngine = Any
+    CoTracker3Config = Any
+
+# Runtime imports with fallbacks
+try:
+    from .flowseek_engine import create_flowseek_engine as _create_flowseek_engine  # type: ignore
+    from .sam2_engine import SAM2SegmentationEngine as _SAM2SegmentationEngine  # type: ignore
     ENGINES_AVAILABLE = True
-    
-    # Use imported configs to avoid type conflicts
-    FlowSeekConfig = FlowSeekEngineConfig
-    SAM2Config = SAM2EngineConfig
-    
+    # Alias for backward compatibility
+    create_flowseek_engine = _create_flowseek_engine
 except ImportError as e:
     ENGINES_AVAILABLE = False
     warnings.warn(f"Integration engines not available: {e}")
     
-    # Define fallback classes to prevent unbound variable errors
-    class FlowSeekConfig:
-        def __init__(self):
-            pass
-    class SAM2Config:
-        def __init__(self):
-            pass
-    def create_flowseek_engine(*args, **kwargs):
-        return None
-    class SAM2SegmentationEngine:
+    def _create_flowseek_engine(*args, **kwargs) -> Any:
+        raise ImportError("FlowSeek engine not available")
+    
+    def create_flowseek_engine(*args, **kwargs) -> Any:
+        raise ImportError("FlowSeek engine not available")
+    
+    class _SAM2SegmentationEngine:  # type: ignore
         def __init__(self, *args, **kwargs):
             pass
         def segment_video_batch(self, *args, **kwargs):
@@ -427,14 +432,16 @@ class SAM2FlowSeekBridge:
             rgb2_255 = rgb2.clamp(0, 1) * 255.0
             
             # Forward flow
-            _, forward_flow_tensor = self.flowseek_engine(
+            forward_flow_result = self.flowseek_engine(
                 rgb1_255, rgb2_255, test_mode=True
             )
+            forward_flow_tensor = forward_flow_result[1] if len(forward_flow_result) > 1 else forward_flow_result
             
             # Backward flow
-            _, backward_flow_tensor = self.flowseek_engine(
+            backward_flow_result = self.flowseek_engine(
                 rgb2_255, rgb1_255, test_mode=True
             )
+            backward_flow_tensor = backward_flow_result[1] if len(backward_flow_result) > 1 else backward_flow_result
             
             # Convert to numpy
             forward_flow = forward_flow_tensor[0].permute(1, 2, 0).cpu().numpy()
@@ -750,35 +757,22 @@ class SAM2FlowSeekBridge:
         frame2 = (rgb2[0].permute(1, 2, 0).cpu().numpy() * 255).astype(np.uint8)
         
         # Convert to grayscale
-        gray1 = cv2.cvtColor(frame1, cv2.COLOR_RGB2GRAY)
-        gray2 = cv2.cvtColor(frame2, cv2.COLOR_RGB2GRAY)
+        gray1 = cv2.cvtColor(frame1, cv2.COLOR_RGB2GRAY).astype(np.uint8)
+        gray2 = cv2.cvtColor(frame2, cv2.COLOR_RGB2GRAY).astype(np.uint8)
         
-        # Fixed: Proper calcOpticalFlowFarneback with correct positional parameters
+        # Preallocate flow arrays for OpenCV compatibility
+        h, w = gray1.shape
+        forward_flow_init = np.zeros((h, w, 2), dtype=np.float32)
+        backward_flow_init = np.zeros((h, w, 2), dtype=np.float32)
+        
+        # Fixed: Proper calcOpticalFlowFarneback with preallocated arrays and positional args
         forward_flow = cv2.calcOpticalFlowFarneback(
-            gray1,  # prev - first frame
-            gray2,  # next - second frame 
-            None,   # flow - output buffer (None means allocate)
-            0.5,    # pyr_scale
-            3,      # levels
-            15,     # winsize
-            3,      # iterations
-            5,      # poly_n
-            1.2,    # poly_sigma
-            0       # flags
+            gray1, gray2, forward_flow_init, 0.5, 3, 15, 3, 5, 1.2, 0
         )
         
         # Fixed: Compute proper backward flow using Farneback on swapped frames
         backward_flow = cv2.calcOpticalFlowFarneback(
-            gray2,  # prev - swapped for backward flow
-            gray1,  # next - swapped for backward flow
-            None,   # flow - output buffer (None means allocate)
-            0.5,    # pyr_scale
-            3,      # levels
-            15,     # winsize
-            3,      # iterations
-            5,      # poly_n
-            1.2,    # poly_sigma
-            0       # flags
+            gray2, gray1, backward_flow_init, 0.5, 3, 15, 3, 5, 1.2, 0
         )
         
         # Handle None cases with explicit logging instead of silent fallbacks

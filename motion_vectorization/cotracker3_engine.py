@@ -146,7 +146,12 @@ class CoTracker3TrackerEngine:
         if os.path.exists(checkpoint_path):
             try:
                 print(f"   Loading from local checkpoint: {checkpoint_path}")
-                import cotracker
+                # Import cotracker for local checkpoint loading
+                try:
+                    import cotracker  # type: ignore
+                except ImportError:
+                    print("⚠️ CoTracker module not available for local checkpoint")
+                    raise
                 # Load model architecture
                 self.model = torch.hub.load(
                     "facebookresearch/co-tracker", 

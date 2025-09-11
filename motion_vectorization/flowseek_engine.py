@@ -668,7 +668,8 @@ class FlowSeekEngine(nn.Module):
                         if self.depth_estimator is not None:
                             self.depth_estimator.eval()
                             if hasattr(self.depth_estimator, 'to'):
-                                self.depth_estimator.to(self.device)
+                                device_obj = torch.device(self.device) if isinstance(self.device, str) else self.device
+                                self.depth_estimator = self.depth_estimator.to(device_obj)  # type: ignore
                         print(f"✅ Loaded DPT depth model: {model_name}")
                         return
                     except Exception as dpt_e:

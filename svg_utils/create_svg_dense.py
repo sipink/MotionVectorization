@@ -329,7 +329,7 @@ def append_animate_transform(image, type, dur, values_list, shape_name):
     id = "_".join([shape_name, type])
     
     if type == 'display' or type == 'z-index':
-        image.appendAnim(draw.Animate(
+        image.append_anim(draw.Animate(
             type,
             dur,
             value_string,
@@ -339,7 +339,7 @@ def append_animate_transform(image, type, dur, values_list, shape_name):
             fill="freeze",
         ))
     else:
-        image.appendAnim(draw.AnimateTransform(
+        image.append_anim(draw.AnimateTransform(
             type,
             dur,
             value_string,

@@ -50,7 +50,7 @@ def main():
       resize_ratio = min(arg.min_dim / frame_height, arg.min_dim / frame_width)
       frame = cv2.resize(frame, (int(resize_ratio * frame_width), int(resize_ratio * frame_height)))
     save = True
-    if frame_idx > 0:
+    if frame_idx > 0 and prev_frame is not None:
       if np.mean(np.abs(frame / 255.0 - prev_frame / 255.0)) < arg.thresh:
         save = False
     if save:

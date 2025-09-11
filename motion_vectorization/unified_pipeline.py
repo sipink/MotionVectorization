@@ -335,6 +335,7 @@ class UnifiedMotionPipeline:
                 # Multi-GPU setup if available and requested
                 if self.config.multi_gpu and torch.cuda.device_count() > 1:
                     # Note: Actual DataParallel setup would be engine-specific
+                    pass
                 
             # Memory optimization with error handling
             if self.config.memory_efficient:
@@ -343,9 +344,11 @@ class UnifiedMotionPipeline:
                         torch.cuda.empty_cache()
                     gc.collect()
                 except Exception as e:
+                    print(f"⚠️ Memory optimization failed: {e}")
                 
             
         except Exception as e:
+            print(f"⚠️ Pipeline optimization failed: {e}")
         
     def _warmup_pipeline(self) -> None:
         """Warmup all engines for optimal performance with error handling"""
@@ -1148,6 +1151,7 @@ class UnifiedMotionPipeline:
                     flow_path = flow_dir / f"frame_{frame_idx:04d}_flow.npy"
                     np.save(flow_path, forward_flow)
         except Exception as e:
+            print(f"⚠️ Flow data save failed: {e}")
         
         try:
             # Save motion parameters with validation
@@ -1157,6 +1161,7 @@ class UnifiedMotionPipeline:
                 with open(motion_path, 'w') as f:
                     json.dump(motion_params, f, indent=2)
         except Exception as e:
+            print(f"⚠️ Motion parameters save failed: {e}")
             
     def _save_visualization(self, results: Dict[str, Any], viz_path: Path):
         """Save visualization of results"""

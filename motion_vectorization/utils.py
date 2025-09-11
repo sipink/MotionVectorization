@@ -83,7 +83,7 @@ except ImportError:
         return F.conv2d(input, kernel, padding=padding, groups=input.size(1))
 
 try:
-    from torchvision.transforms import Resize
+    from torchvision.transforms import Resize  # type: ignore[assignment]
     TORCHVISION_AVAILABLE = True
 except ImportError:
     TORCHVISION_AVAILABLE = False
@@ -144,9 +144,11 @@ try:
     PYEFD_AVAILABLE = True
 except ImportError:
     PYEFD_AVAILABLE = False
-    def elliptic_fourier_descriptors(contour, order=10, normalize=False):
+    def elliptic_fourier_descriptors(contour, order=10, normalize=False, return_transformation=False):
         """Fallback stub - pyefd not available"""
         # Return a stub implementation to prevent import errors
+        if return_transformation:
+            return np.zeros((order, 4)), (0, 0, 0)
         return np.zeros((order, 4))
 
 # Import modern modules for compositing and sampling
@@ -541,10 +543,10 @@ class InputPadder:
 # ============================================================================
 
 # Provide access to colormap utility if available
-try:
-    from .sampling import get_cmap
-except ImportError:
-    def get_cmap(n):
-        """Fallback colormap generator"""
-        import matplotlib.pyplot as plt
-        return plt.cm.tab10 if n <= 10 else plt.cm.viridis
+def get_cmap(n):
+    """Colormap generator utility"""
+    import matplotlib.pyplot as plt
+    try:
+        return plt.colormaps['tab10'] if n <= 10 else plt.colormaps['viridis'] 
+    except (AttributeError, KeyError):
+        return plt.cm.get_cmap('tab10') if n <= 10 else plt.cm.get_cmap('viridis')

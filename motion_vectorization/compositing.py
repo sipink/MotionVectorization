@@ -9,8 +9,8 @@ import matplotlib.pyplot as plt
 import kornia
 from tqdm import tqdm
 
-from .sampling import sampling_layer
-from .utils import torch2numpy, init_optimizer, norm_image, compute_image_sdf
+from .sampling import sampling_layer, torch2numpy
+# Import removed: norm_image not defined in utils
 
 
 def composite_layers(elements, variables, origin, layer_indices, shape, bg_color, 
@@ -46,7 +46,7 @@ def composite_layers(elements, variables, origin, layer_indices, shape, bg_color
   elements_warped = sampling_layer(
     elements, variables[0], variables[1], variables[2], variables[3], 
     variables[4], variables[5], variables[6], shape, origin=origin, 
-    blur=blur, blur_kernel=blur_kernel, device=device, debug=debug
+    blur=blur, blur_kernel=blur_kernel, device=device
   )
 
   elements_warped = torch.clamp(elements_warped, 0, 1)
@@ -143,7 +143,19 @@ def compute_sdf(mask):
   '''
   Compute signed distance field from binary mask.
   '''
-  return compute_image_sdf(mask)
+  # Use distance transform as SDF approximation
+  if isinstance(mask, torch.Tensor):
+      mask_np = mask.detach().cpu().numpy()
+  else:
+      mask_np = mask
+  
+  # Distance transform for signed distance field
+  from scipy.ndimage import distance_transform_edt
+  if mask_np.max() > 0:
+      dist = distance_transform_edt(mask_np > 0.5)
+      return torch.from_numpy(dist).float().to(mask.device if isinstance(mask, torch.Tensor) else 'cpu')
+  else:
+      return torch.zeros_like(mask)
 
 
 def dsample(img, factor=2):

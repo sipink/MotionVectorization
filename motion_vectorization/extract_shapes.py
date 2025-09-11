@@ -901,15 +901,16 @@ def main():
                 _, _, sx0, sy0, theta0, kx0 = decompose(init_data['h'])
               else:
                 sx0, sy0, theta0, kx0 = 1.0, 1.0, 0.0, 0.0
+              shape_crop = shape_crops.get(shape_idx) if isinstance(shape_crops, dict) else None
+              if shape_crop is None:
+                continue
+              # Only append element data after confirming shape_crop exists
               sx_init.append(sx0)
               sy_init.append(sy0)
               theta_init.append(theta0)
               kx_init.append(kx0)
               ky_init.append(0)
               element_labels.append(shape_idx)
-              shape_crop = shape_crops.get(shape_idx) if isinstance(shape_crops, dict) else None
-              if shape_crop is None:
-                continue
               elements.append(shape_crop)
               shape_mask = np.uint8(from_fg_labels==shape_idx)
               shape_coords = np.stack(np.where(shape_mask>0), axis=1)[:, ::-1]  # x, y
@@ -1169,6 +1170,9 @@ def main():
           target_labels.append(target_label[r_min_y:r_max_y, r_min_x:r_max_x])
           target_idx += 1
       print('[NOTE] target_to_element:', target_to_element)
+      
+      # Ensure element counts match to prevent IndexError
+      assert len(element_labels) == len(elements), f"Mismatch: {len(element_labels)} labels vs {len(elements)} elements"
 
       if len(target_to_element) > 0 and len(elements) > 0 and len(targets) > 0:
         t2e_vis = viz.target_to_element(target_to_element, elements, targets)

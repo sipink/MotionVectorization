@@ -9,10 +9,10 @@ import json
 import time
 import datetime
 import collections
-import matplotlib.pyplot as plt
 import matplotlib as mpl
+mpl.use('Agg')  # Set backend before importing pyplot
+import matplotlib.pyplot as plt
 from typing import Dict, Any
-mpl.use('Agg')
 from skimage.transform import AffineTransform
 from skimage.measure import ransac
 import networkx as nx
@@ -67,7 +67,7 @@ parser.add_argument(
   '--min_cluster_size', default=50, type=int, 
   help='The minimum number of samples allowed in a cluster.')
 parser.add_argument(
-  '--min_density', default=0.15, type=int, 
+  '--min_density', default=0.15, type=float, 
   help='The minimum density cluster allowed.')
 parser.add_argument(
   '--bg_file', type=str, default=None, 

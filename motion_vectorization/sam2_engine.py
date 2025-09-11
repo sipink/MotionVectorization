@@ -28,16 +28,18 @@ except ImportError:
         SAM2_AVAILABLE = False
         warnings.warn("SAM2.1 not available. Using fallback implementation.")
 
-# Define typed dummies to prevent unbound variable errors
-def build_sam2_video_predictor(*args, **kwargs) -> Any:
-    """Fallback SAM2 video predictor builder"""
-    raise RuntimeError("SAM2 not available. Install segment-anything-2 package for full functionality.")
-
-class SAM2ImagePredictor:
-    """Fallback SAM2 image predictor"""
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs) -> Any:
+# Only define fallback functions if SAM2 is not available
+if not SAM2_AVAILABLE:
+    # Define typed dummies to prevent unbound variable errors
+    def build_sam2_video_predictor(*args, **kwargs) -> Any:
+        """Fallback SAM2 video predictor builder"""
         raise RuntimeError("SAM2 not available. Install segment-anything-2 package for full functionality.")
+
+    class SAM2ImagePredictor:
+        """Fallback SAM2 image predictor"""
+        @classmethod
+        def from_pretrained(cls, *args, **kwargs) -> Any:
+            raise RuntimeError("SAM2 not available. Install segment-anything-2 package for full functionality.")
 
 
 @dataclass

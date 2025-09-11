@@ -2183,6 +2183,11 @@ def main():
       with open(os.path.join(video_folder, 'time_bank.pkl'), 'wb') as handle:
         pickle.dump(time_bank, handle)
       print('[NOTE] Time bank saved to:', os.path.join(video_folder, 'time_bank.pkl'))
+      
+      # Save shape bank (periodic checkpoint)
+      with open(os.path.join(video_folder, 'shape_bank.pkl'), 'wb') as handle:
+        pickle.dump(shape_bank, handle)
+      print('[NOTE] Shape bank saved to:', os.path.join(video_folder, 'shape_bank.pkl'))
 
       # Save highest resolution shapes.
       shapes_folder = os.path.join(video_folder, 'shapes')
@@ -2223,6 +2228,11 @@ def main():
   with open(os.path.join(video_folder, 'time_bank.pkl'), 'wb') as handle:
     pickle.dump(time_bank, handle)
   print('[NOTE] Time bank saved to:', os.path.join(video_folder, 'time_bank.pkl'))
+  
+  # Save shape bank
+  with open(os.path.join(video_folder, 'shape_bank.pkl'), 'wb') as handle:
+    pickle.dump(shape_bank, handle)
+  print('[NOTE] Shape bank saved to:', os.path.join(video_folder, 'shape_bank.pkl'))
 
 # ================================
 # Unified Pipeline Processing Functions

@@ -525,6 +525,24 @@ class UnifiedMotionPipeline:
             print(f"⚠️ Pipeline warmup failed: {e}")
             print("   Continuing without warmup - performance may be slower initially")
             
+    def process_video(
+        self,
+        video_path: str,
+        output_dir: str = None,
+        max_frames: int = -1,
+        start_frame: int = 0,
+        save_visualizations: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Main entry point for processing video - unified interface
+        """
+        if output_dir is None:
+            # Generate default output dir based on video name
+            video_name = Path(video_path).stem
+            output_dir = f"motion_vectorization/outputs/{video_name}_{self.config.mode}"
+        
+        return self.process_video_sequence(video_path, output_dir, max_frames, start_frame, save_visualizations)
+    
     def process_video_sequence(
         self,
         video_path: str,

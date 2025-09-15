@@ -64,7 +64,7 @@ detect_gpu() {
     
     if command -v nvidia-smi &> /dev/null; then
         echo -e "${GREEN}✅ NVIDIA GPU detected${NC}"
-        nvidia-smi --query-gpu=name,memory.total,driver_version,cuda_version --format=csv,noheader,nounits
+        nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader,nounits
         
         # Get CUDA capability
         GPU_ARCH=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader,nounits | head -1)

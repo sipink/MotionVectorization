@@ -13,10 +13,18 @@ from dataclasses import dataclass
 from collections import defaultdict
 import time
 
+# Add huggingface_hub for model caching
+try:
+    from huggingface_hub import snapshot_download
+    HF_AVAILABLE = True
+except ImportError:
+    HF_AVAILABLE = False
+
 # Check if SAM2 is available
 try:
     from sam2.build_sam import build_sam2_video_predictor  # type: ignore[import-untyped]
     from sam2.sam2_video_predictor import SAM2VideoPredictor  # type: ignore[import-untyped]
+    from sam2.sam2_image_predictor import SAM2ImagePredictor  # type: ignore[import-untyped]
     SAM2_AVAILABLE = True
     print("✅ SAM2.1 engine loaded successfully")
 except ImportError:
@@ -118,6 +126,14 @@ class SAM2SegmentationEngine:
         try:
             print("📦 Loading SAM2 video predictor...")
             # Video predictor for motion graphics
+            
+            # Check if local checkpoint exists, otherwise download from HF
+            if not os.path.exists(self.config.sam2_checkpoint) and HF_AVAILABLE:
+                print("🔄 Downloading SAM2 model from HuggingFace...")
+                local_dir = snapshot_download("facebook/sam2-hiera-large")
+                self.config.sam2_checkpoint = os.path.join(local_dir, "sam2_hiera_large.pt")
+                self.config.model_cfg = os.path.join(local_dir, "sam2_hiera_l.yaml")
+            
             self.predictor = build_sam2_video_predictor(
                 self.config.model_cfg,
                 self.config.sam2_checkpoint,
@@ -133,10 +149,8 @@ class SAM2SegmentationEngine:
         try:
             print("📦 Loading SAM2 image predictor...")
             # Image predictor for single frame processing
-            self.image_predictor = SAM2ImagePredictor.from_pretrained(
-                "facebook/sam2-hiera-large",
-                device=self.device
-            )
+            self.image_predictor = SAM2ImagePredictor.from_pretrained("facebook/sam2-hiera-large")
+            self.image_predictor.to(self.device)
             image_predictor_loaded = True
             print("✅ SAM2 image predictor loaded")
             

@@ -76,6 +76,14 @@ except ImportError:
 # Only consider actual engines, not bridges, for availability
 ENGINES_AVAILABLE = any(ENGINE_AVAILABILITY[k] for k in ['sam2', 'cotracker3', 'flowseek'])
 
+# Import SVG generation capabilities
+try:
+    from .svg_generator import MotionVectorizationSVGGenerator, SVGGenerationConfig
+    SVG_GENERATION_AVAILABLE = True
+except ImportError:
+    MotionVectorizationSVGGenerator = SVGGenerationConfig = None
+    SVG_GENERATION_AVAILABLE = False
+
 
 @dataclass
 class UnifiedPipelineConfig:
@@ -130,6 +138,13 @@ class UnifiedPipelineConfig:
     quality_monitoring: bool = True
     performance_profiling: bool = True
     verbose_logging: bool = True
+    
+    # SVG generation settings
+    generate_svg: bool = True  # Generate SVG output in addition to JSON
+    svg_quality_mode: str = "balanced"  # "speed", "balanced", "quality"
+    svg_curve_smoothing: bool = True
+    svg_frame_rate: float = 60.0
+    svg_include_debug_info: bool = False
     
     def __post_init__(self):
         """Initialize mode-specific configurations with engine availability checks"""
@@ -544,10 +559,26 @@ class UnifiedMotionPipeline:
         results_file = output_path / "unified_pipeline_results.json"
         self._save_complete_results(final_results, results_file)
         
+        # Generate motion file for SVG generation
+        motion_file_path = output_path / "motion_file.json"
+        motion_file_generated = self._generate_motion_file(
+            processing_results, frames_to_process, motion_file_path, 
+            int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
+            int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        )
+        
+        # Generate SVG if enabled and motion file was created
+        if self.config.generate_svg and motion_file_generated and SVG_GENERATION_AVAILABLE:
+            shapes_dir = output_path / "shapes"
+            svg_output_path = output_path / "motion_file.svg"
+            self._generate_svg_output(motion_file_path, shapes_dir, svg_output_path)
+        
         # Performance summary
         avg_fps = len(processing_results) / final_results['total_processing_time']
         avg_quality = np.mean(final_results['quality_scores']['overall'])
         
+        # Cleanup video capture
+        cap.release()
         
         return final_results
         
@@ -1417,6 +1448,138 @@ class UnifiedMotionPipeline:
         except Exception as e:
             print(f"⚠️ Physical constraint enforcement failed: {e}")
             return motion_params
+    
+    def _generate_motion_file(self, processing_results: List[Dict[str, Any]], 
+                             total_frames: int, output_path: Path,
+                             frame_width: int, frame_height: int) -> bool:
+        """
+        Generate motion_file.json from unified pipeline results
+        
+        Args:
+            processing_results: Results from frame processing
+            total_frames: Total number of frames
+            output_path: Path to save motion_file.json
+            frame_width: Video frame width
+            frame_height: Video frame height
+            
+        Returns:
+            True if motion file was generated successfully
+        """
+        try:
+            motion_file = {
+                '-1': {
+                    'name': 'unified_pipeline_output',
+                    'width': frame_width,
+                    'height': frame_height,
+                    'bg_color': [[128, 128, 128]],  # Default gray background
+                    'bg_img': None,
+                    'time': list(range(1, total_frames + 1))
+                }
+            }
+            
+            # Extract shape data from processing results
+            shape_id = 0
+            for frame_idx, frame_result in enumerate(processing_results):
+                if 'segmentation' not in frame_result:
+                    continue
+                    
+                seg_data = frame_result['segmentation']
+                if 'masks' in seg_data and seg_data['masks'] is not None:
+                    # Process each detected mask as a shape
+                    for mask_idx, mask in enumerate(seg_data['masks']):
+                        shape_key = str(shape_id)
+                        if shape_key not in motion_file:
+                            # Initialize shape data
+                            motion_file[shape_key] = {
+                                'shape': f'shapes/{shape_id}.png',
+                                'size': (mask.shape[1], mask.shape[0]),
+                                'centroid': [mask.shape[1]//2, mask.shape[0]//2],
+                                'time': [],
+                                'cx': [],
+                                'cy': [],
+                                'sx': [],
+                                'sy': [],
+                                'theta': [],
+                                'kx': [],
+                                'ky': [],
+                                'z': []
+                            }
+                        
+                        # Add frame data (simplified transformation parameters)
+                        motion_file[shape_key]['time'].append(frame_idx + 1)
+                        motion_file[shape_key]['cx'].append(0.5)  # Normalized center
+                        motion_file[shape_key]['cy'].append(0.5)
+                        motion_file[shape_key]['sx'].append(1.0)  # Unit scale
+                        motion_file[shape_key]['sy'].append(1.0)
+                        motion_file[shape_key]['theta'].append(0.0)  # No rotation
+                        motion_file[shape_key]['kx'].append(0.0)  # No shear
+                        motion_file[shape_key]['ky'].append(0.0)
+                        motion_file[shape_key]['z'].append(float(shape_id))  # Z-order
+                        
+                        shape_id += 1
+            
+            # Save motion file
+            with open(output_path, 'w') as f:
+                json.dump(motion_file, f, indent=2)
+            
+            print(f"✅ Motion file generated: {output_path}")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Motion file generation failed: {e}")
+            return False
+    
+    def _generate_svg_output(self, motion_file_path: Path, shapes_dir: Path, 
+                           svg_output_path: Path) -> bool:
+        """
+        Generate SVG animation from motion file and shape masks
+        
+        Args:
+            motion_file_path: Path to motion_file.json
+            shapes_dir: Directory containing shape PNG masks
+            svg_output_path: Output path for SVG file
+            
+        Returns:
+            True if SVG was generated successfully
+        """
+        try:
+            if not SVG_GENERATION_AVAILABLE:
+                print("❌ SVG generation not available (missing dependencies)")
+                return False
+            
+            # Check if SVG classes are available
+            if SVGGenerationConfig is None or MotionVectorizationSVGGenerator is None:
+                print("❌ SVG generation classes not available")
+                return False
+            
+            # Create SVG generation configuration
+            svg_config = SVGGenerationConfig(
+                quality_mode=self.config.svg_quality_mode,
+                curve_smoothing=self.config.svg_curve_smoothing,
+                frame_rate=self.config.svg_frame_rate,
+                include_debug_info=self.config.svg_include_debug_info
+            )
+            
+            # Initialize SVG generator
+            svg_generator = MotionVectorizationSVGGenerator(svg_config)
+            
+            # Generate SVG
+            success = svg_generator.generate_svg_from_motion_file(
+                str(motion_file_path),
+                str(shapes_dir),
+                str(svg_output_path)
+            )
+            
+            if success:
+                print(f"✅ SVG generated successfully: {svg_output_path}")
+            else:
+                print(f"❌ SVG generation failed")
+                
+            return success
+            
+        except Exception as e:
+            print(f"❌ SVG generation error: {e}")
+            return False
 
 
 # Simplified helper functions

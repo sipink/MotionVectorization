@@ -41,6 +41,17 @@ echo "  Python: ${PYTHON_VERSION}"
 echo "  Workspace: ${WORKSPACE_DIR}"
 echo ""
 
+# Function to find nvidia-smi in various common paths
+find_nvidia_smi() {
+    for p in "$(command -v nvidia-smi 2>/dev/null)" /usr/bin/nvidia-smi /usr/local/nvidia/bin/nvidia-smi /usr/lib/nvidia*/bin/nvidia-smi; do
+        [ -x "$p" ] && echo "$p" && return 0
+    done
+    return 1
+}
+
+# Set nvidia-smi path if available
+NVIDIA_SMI="$(find_nvidia_smi || true)"
+
 # Function to print section headers
 print_section() {
     echo -e "\n${BLUE}═══════════════════════════════════════════════════════════════${NC}"
@@ -62,16 +73,15 @@ check_success() {
 detect_gpu() {
     echo -e "${CYAN}🔍 Detecting GPU capabilities...${NC}"
     
-    if command -v nvidia-smi &> /dev/null; then
+    if [ -n "$NVIDIA_SMI" ]; then
         echo -e "${GREEN}✅ NVIDIA GPU detected${NC}"
-        nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader,nounits
-        
-        # Get CUDA capability
-        GPU_ARCH=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader,nounits | head -1)
-        echo "  CUDA Compute Capability: $GPU_ARCH"
-        
-        # Check if GPU supports mixed precision (Tensor Cores)
-        if python3 -c "
+        "$NVIDIA_SMI" --query-gpu=name,memory.total,driver_version --format=csv,noheader,nounits || echo "  (nvidia-smi query failed, continuing...)"
+    else
+        echo -e "${YELLOW}⚠️  No NVIDIA GPU tools in PATH - skipping nvidia-smi${NC}"
+    fi
+    
+    # Check if GPU supports mixed precision (Tensor Cores) - using PyTorch detection
+    if python3 -c "
 import torch
 if torch.cuda.is_available():
     props = torch.cuda.get_device_properties(0)
@@ -82,11 +92,12 @@ if torch.cuda.is_available():
         print('  ✅ Tensor Cores supported (mixed precision available)')
     else:
         print('  ⚠️  Mixed precision may have limited support')
+else:
+    print('  ⚠️  No CUDA GPU available to PyTorch')
 " 2>/dev/null; then
-            echo -e "${GREEN}✅ PyTorch GPU detection successful${NC}"
-        fi
+        echo -e "${GREEN}✅ PyTorch GPU detection successful${NC}"
     else
-        echo -e "${YELLOW}⚠️  No NVIDIA GPU detected - using CPU fallback${NC}"
+        echo -e "${YELLOW}⚠️  PyTorch GPU detection failed - using CPU fallback${NC}"
     fi
 }
 
@@ -349,19 +360,19 @@ install_motion_vectorization_deps() {
 optimize_gpu_performance() {
     print_section "⚡ Optimizing GPU Performance"
     
-    if command -v nvidia-smi &> /dev/null; then
+    if [ -n "$NVIDIA_SMI" ]; then
         echo "🔧 Setting GPU performance mode..."
         
         # Set GPU performance mode to maximum
-        nvidia-smi -pm 1  # Persistence mode
-        nvidia-smi -ac 877,1380  # Memory and GPU clocks (adjust based on GPU)
+        "$NVIDIA_SMI" -pm 1 2>/dev/null || echo "  (persistence mode failed, continuing...)"  # Persistence mode
+        "$NVIDIA_SMI" -ac 877,1380 2>/dev/null || echo "  (clock setting failed, continuing...)"  # Memory and GPU clocks (adjust based on GPU)
         
         # Set GPU power limit to maximum (if supported)
-        nvidia-smi -pl $(nvidia-smi --query-gpu=power.max_limit --format=csv,noheader,nounits | head -1) || true
+        "$NVIDIA_SMI" -pl $("$NVIDIA_SMI" --query-gpu=power.max_limit --format=csv,noheader,nounits | head -1) 2>/dev/null || echo "  (power limit setting failed, continuing...)"
         
         echo "✅ GPU performance optimization completed"
     else
-        echo "⚠️  No GPU detected - skipping GPU optimization"
+        echo "⚠️  No NVIDIA GPU tools available - skipping GPU optimization"
     fi
     
     # Set environment variables for optimal performance

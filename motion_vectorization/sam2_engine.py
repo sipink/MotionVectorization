@@ -118,7 +118,7 @@ class SAM2SegmentationEngine:
         # Always fallback to traditional methods if SAM2 fails
         self._initialize_fallback_engine()
     
-   def _initialize_sam2_models(self):
+    def _initialize_sam2_models(self):
         """Initialize official SAM2.1 models with robust error handling"""
         predictor_loaded = False
         image_predictor_loaded = False
@@ -326,16 +326,16 @@ class SAM2SegmentationEngine:
                                 auto_masks = self.image_predictor.generate_masks()
                             else:
                                 # Fallback to predict method
-                                masks, scores, logits = self.image_predictor.predict(
+                                masks_pred, scores, logits = self.image_predictor.predict(
                                     point_coords=None,
                                     point_labels=None,
                                     multimask_output=True,
                                     return_logits=True
                                 )
                                 auto_masks = [{
-                                    'segmentation': masks[i],
+                                    'segmentation': masks_pred[i],
                                     'predicted_iou': scores[i] if i < len(scores) else 0.5
-                                } for i in range(len(masks))]
+                                } for i in range(len(masks_pred))]
                             
                             # Select best masks based on quality scores
                             if auto_masks and len(auto_masks) > 0:
@@ -450,7 +450,7 @@ class SAM2SegmentationEngine:
         edges_combined = np.bitwise_or(edges_sobel, edges_canny)
         
         # Morphological operations
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+        kernel = cv2.getStructuringElement(cv.MORPH_ELLIPSE, (5, 5))
         edges_combined = cv2.morphologyEx(edges_combined, cv2.MORPH_CLOSE, kernel)
         
         # Watershed-based segmentation
@@ -631,4 +631,3 @@ def convert_to_clusters(
         labels_vis = np.zeros_like(final_labels, dtype=np.uint8)
     
     return final_labels - 1, labels_vis  # Subtract 1 to match existing format
-

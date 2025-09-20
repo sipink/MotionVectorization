@@ -352,7 +352,9 @@ class SAM2SegmentationEngine:
                 
                 # Post-process mask
                 mask_uint8 = (mask * 255).astype(np.uint8)
-                masks.append(mask_uint8)
+                # Add a channel dimension for compatibility with other CV engines
+                mask_with_channel = np.expand_dims(mask_uint8, axis=-1)
+                masks.append(mask_with_channel)
                 
                 # Calculate quality metrics
                 quality_score = self._calculate_quality_score(frame, mask_uint8)

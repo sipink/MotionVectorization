@@ -118,55 +118,65 @@ class SAM2SegmentationEngine:
         # Always fallback to traditional methods if SAM2 fails
         self._initialize_fallback_engine()
     
-    def _initialize_sam2_models(self):
-        """Initialize official SAM2.1 models with robust error handling"""
-        predictor_loaded = False
-        image_predictor_loaded = False
+   def _initialize_sam2_models(self):
+    """Initialize official SAM2.1 models with robust error handling"""
+    predictor_loaded = False
+    image_predictor_loaded = False
+    
+    try:
+        print("📦 Loading SAM2 video predictor...")
+        # Video predictor for motion graphics
         
-        try:
-            print("📦 Loading SAM2 video predictor...")
-            # Video predictor for motion graphics
+        # Check if local checkpoint exists, otherwise download from HF
+        if not os.path.exists(self.config.sam2_checkpoint) and HF_AVAILABLE:
+            print("🔄 Downloading SAM2 model from HuggingFace...")
+            local_dir = snapshot_download("facebook/sam2-hiera-large")
+            self.config.sam2_checkpoint = os.path.join(local_dir, "sam2_hiera_large.pt")
             
-            # Check if local checkpoint exists, otherwise download from HF
-            if not os.path.exists(self.config.sam2_checkpoint) and HF_AVAILABLE:
-                print("🔄 Downloading SAM2 model from HuggingFace...")
-                local_dir = snapshot_download("facebook/sam2-hiera-large")
-                self.config.sam2_checkpoint = os.path.join(local_dir, "sam2_hiera_large.pt")
-                self.config.model_cfg = os.path.join(local_dir, "sam2_hiera_l.yaml")
-            
-            self.predictor = build_sam2_video_predictor(
-                self.config.model_cfg,
-                self.config.sam2_checkpoint,
-                device=self.device
-            )
-            predictor_loaded = True
-            print("✅ SAM2 video predictor loaded")
-            
-        except Exception as e:
-            print(f"⚠️ SAM2 video predictor failed: {e}")
-            self.predictor = None
-            
-        try:
-            print("📦 Loading SAM2 image predictor...")
-            # Image predictor for single frame processing
-            self.image_predictor = SAM2ImagePredictor.from_pretrained("facebook/sam2-hiera-large")
-            self.image_predictor.to(self.device)
-            image_predictor_loaded = True
-            print("✅ SAM2 image predictor loaded")
-            
-        except Exception as e:
-            print(f"⚠️ SAM2 image predictor failed: {e}")
-            self.image_predictor = None
-            
-        # Apply optimizations only if models loaded and CUDA available
-        if (predictor_loaded or image_predictor_loaded):
-            self._apply_optimizations()
-            
-        # If neither model loaded, raise exception to trigger fallback
-        if not predictor_loaded and not image_predictor_loaded:
-            raise RuntimeError("Both SAM2 predictors failed to load")
-            
-        print(f"✅ SAM2.1 models initialized (Video: {predictor_loaded}, Image: {image_predictor_loaded})")
+            # FIX 1: DO NOT override the model_cfg path. Let the library find its default.
+            # self.config.model_cfg = os.path.join(local_dir, "sam2_hiera_l.yaml")
+        
+        # The library will now use its default search path for the .yaml file
+        self.predictor = build_sam2_video_predictor(
+            self.config.model_cfg,
+            self.config.sam2_checkpoint,
+            device=self.device
+        )
+        predictor_loaded = True
+        print("✅ SAM2 video predictor loaded")
+        
+    except Exception as e:
+        print(f"⚠️ SAM2 video predictor failed: {e}")
+        self.predictor = None
+        
+    try:
+        print("📦 Loading SAM2 image predictor...")
+        # Image predictor for single frame processing
+        
+        # FIX 2: Pass the device directly to the from_pretrained method.
+        self.image_predictor = SAM2ImagePredictor.from_pretrained(
+            "facebook/sam2-hiera-large",
+            device=self.device
+        )
+        # The incorrect .to() call is no longer needed.
+        # self.image_predictor.to(self.device)
+        
+        image_predictor_loaded = True
+        print("✅ SAM2 image predictor loaded")
+        
+    except Exception as e:
+        print(f"⚠️ SAM2 image predictor failed: {e}")
+        self.image_predictor = None
+        
+    # Apply optimizations only if models loaded and CUDA available
+    if (predictor_loaded or image_predictor_loaded):
+        self._apply_optimizations()
+        
+    # If neither model loaded, raise exception to trigger fallback
+    if not predictor_loaded and not image_predictor_loaded:
+        raise RuntimeError("Both SAM2 predictors failed to load")
+        
+    print(f"✅ SAM2.1 models initialized (Video: {predictor_loaded}, Image: {image_predictor_loaded})")
     
     def _apply_optimizations(self):
         """Apply optimizations with proper device checking"""

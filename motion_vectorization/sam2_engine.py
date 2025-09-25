@@ -244,7 +244,7 @@ class SAM2SegmentationEngine:
         
         return masks, metadata
     
-    def _sam2_batch_segmentation(
+def _sam2_batch_segmentation(
         self, 
         frames: List[np.ndarray],
         frame_indices: List[int],
@@ -260,7 +260,6 @@ class SAM2SegmentationEngine:
             'detected_objects': []
         }
         
-        # Initialize inference state for video
         if self.inference_state is None and self.predictor is not None:
             try:
                 self.inference_state = self.predictor.init_state()
@@ -268,13 +267,11 @@ class SAM2SegmentationEngine:
                 print(f"⚠️ Failed to initialize SAM2 inference state: {e}")
                 self.inference_state = None
         
-        # Process frames with mixed precision (only on CUDA)
         autocast_enabled = self.config.mixed_precision and self.device.type == "cuda"
         try:
             if autocast_enabled:
                 autocast_context = torch.autocast(self.device.type, dtype=torch.bfloat16, enabled=True)
             else:
-                # Dummy context manager for CPU
                 import contextlib
                 autocast_context = contextlib.nullcontext()
         except Exception as e:
@@ -286,25 +283,20 @@ class SAM2SegmentationEngine:
             for i, (frame, frame_idx) in enumerate(zip(frames, frame_indices)):
                 frame_start = time.time()
                 
-                # Convert BGR to RGB if needed
                 if frame.shape[-1] == 3 and frame.dtype == np.uint8:
                     frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 else:
                     frame_rgb = frame
                 
-                # Add frame to inference state
                 try:
                     if self.predictor is not None and self.inference_state is not None:
                         self.predictor.add_new_frame(self.inference_state, frame_rgb)
                     else:
                         print("⚠️ SAM2 predictor or inference state not available")
-                        # Will fall back to image predictor below
                 except Exception as e:
                     print(f"⚠️ Failed to add frame to inference state: {e}")
                 
-                # Automatic segmentation or prompt-based
                 if prompts and frame_idx in prompts:
-                    # Use provided prompts
                     if self.predictor is not None and self.inference_state is not None:
                         ann_frame_idx, ann_obj_id, mask = self.predictor.add_new_mask(
                             self.inference_state,
@@ -316,30 +308,22 @@ class SAM2SegmentationEngine:
                         print("⚠️ SAM2 predictor not available for prompt-based segmentation")
                         mask = np.zeros((frame.shape[0], frame.shape[1]), dtype=bool)
                 else:
-                    # Automatic segmentation using image predictor
                     if self.image_predictor is not None:
                         try:
                             self.image_predictor.set_image(frame_rgb)
                             
-                            # Generate automatic masks
                             if hasattr(self.image_predictor, 'generate_masks'):
                                 auto_masks = self.image_predictor.generate_masks()
                             else:
-                                # Fallback to predict method
                                 masks_pred, scores, logits = self.image_predictor.predict(
                                     point_coords=None,
                                     point_labels=None,
                                     multimask_output=True,
                                     return_logits=True
                                 )
-                                auto_masks = [{
-                                    'segmentation': masks_pred[i],
-                                    'predicted_iou': scores[i] if i < len(scores) else 0.5
-                                } for i in range(len(masks_pred))]
+                                auto_masks = [{'segmentation': masks_pred[i], 'predicted_iou': scores[i] if i < len(scores) else 0.5} for i in range(len(masks_pred))]
                             
-                            # Select best masks based on quality scores
                             if auto_masks and len(auto_masks) > 0:
-                                # Sort by predicted IoU (quality score)
                                 best_masks = sorted(auto_masks, key=lambda x: x.get('predicted_iou', 0), reverse=True)
                                 mask = best_masks[0]['segmentation']
                             else:
@@ -350,13 +334,13 @@ class SAM2SegmentationEngine:
                     else:
                         mask = np.zeros((frame.shape[0], frame.shape[1]), dtype=bool)
                 
-                # Post-process mask
                 mask_uint8 = (mask * 255).astype(np.uint8)
-                # Add a channel dimension for compatibility with other CV engines
+
+                # --- THIS IS THE FIX ---
                 mask_with_channel = np.expand_dims(mask_uint8, axis=-1)
                 masks.append(mask_with_channel)
+                # ----------------------
                 
-                # Calculate quality metrics
                 quality_score = self._calculate_quality_score(frame, mask_uint8)
                 metadata['quality_scores'].append(quality_score)
                 metadata['processing_times'].append(time.time() - frame_start)

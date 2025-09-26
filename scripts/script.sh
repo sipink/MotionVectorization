@@ -163,7 +163,7 @@ do
     
     echo "🎨 CLUSTER EXTRACTION"
     if command -v parallel >/dev/null 2>&1; then
-        parallel -j $PARALLEL_JOBS -a "$LIST" ./scripts/extract_clusters.sh
+        parallel -j $PARALLEL_JOBS ./scripts/extract_clusters.sh < "$LIST"
     else
         echo "⚠️ GNU parallel not found, processing sequentially"
         while read -r line; do
@@ -180,7 +180,7 @@ do
     
     echo "🎬 MOTION TRACKING"
     if command -v parallel >/dev/null 2>&1; then
-        parallel -j $PARALLEL_JOBS -a "$LIST" ./scripts/track.sh
+        parallel -j $PARALLEL_JOBS ./scripts/track.sh < "$LIST"
     else
         while read -r line; do
             if [[ ! $line =~ ^#.* ]]; then
@@ -196,7 +196,7 @@ do
 
     echo "⚙️ SHAPE OPTIMIZATION"
     if command -v parallel >/dev/null 2>&1; then
-        parallel -j $PARALLEL_JOBS -a "$LIST" ./scripts/optim.sh
+        parallel -j $PARALLEL_JOBS ./scripts/optim.sh < "$LIST"
     else
         while read -r line; do
             if [[ ! $line =~ ^#.* ]]; then
@@ -212,7 +212,7 @@ do
 
     echo "📝 MOTION PROGRAM GENERATION"
     if command -v parallel >/dev/null 2>&1; then
-        parallel -j $PARALLEL_JOBS -a "$LIST" ./scripts/motion_file.sh
+        parallel -j $PARALLEL_JOBS ./scripts/motion_file.sh < "$LIST"
     else
         while read -r line; do
             if [[ ! $line =~ ^#.* ]]; then

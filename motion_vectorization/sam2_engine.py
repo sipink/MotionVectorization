@@ -244,7 +244,7 @@ class SAM2SegmentationEngine:
         
         return masks, metadata
     
-def _sam2_batch_segmentation(
+    def _sam2_batch_segmentation(
         self, 
         frames: List[np.ndarray],
         frame_indices: List[int],
@@ -436,7 +436,7 @@ def _sam2_batch_segmentation(
         edges_combined = np.bitwise_or(edges_sobel, edges_canny)
         
         # Morphological operations
-        kernel = cv2.getStructuringElement(cv.MORPH_ELLIPSE, (5, 5))
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
         edges_combined = cv2.morphologyEx(edges_combined, cv2.MORPH_CLOSE, kernel)
         
         # Watershed-based segmentation
